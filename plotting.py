@@ -45,11 +45,7 @@ LEGEND = dict(
     fontsize='medium', numpoints=1, labelspacing=0, columnspacing=1.2,
     handlelength=1.5, handletextpad=0.5, ncol=4, loc='lower center')
 
-DEFAULT_BASELINES = [
-    'd4pg', 'dqn_sticky', 'rainbow_sticky', 'human$', 'impala']
-
-BINS = collections.defaultdict(int)
-BINS.update(dmc=1e5, atari=1e6, particle=1e5)
+DEFAULT_BASELINES = ['d4pg', 'rainbow_sticky', 'human_gamer', 'impala']
 
 
 def find_keys(args):
@@ -110,9 +106,8 @@ def load_run(filename, indir, args):
     return
   xs = df[args.xaxis].to_numpy()
   ys = df[args.yaxis].to_numpy()
-  bins = BINS[task.split('_')[0]] if args.bins == -1 else args.bins
-  if bins:
-    borders = np.arange(0, xs.max() + 1e-8, bins)
+  if args.bins:
+    borders = np.arange(0, xs.max() + 1e-8, args.bins)
     xs, ys = bin_scores(xs, ys, borders)
   if not len(xs):
     print('Skipping empty run', task, method, seed)
@@ -173,7 +168,7 @@ def figure(runs, methods, args):
   tasks = sorted(set(r.task for r in runs if r.xs is not None))
   rows = int(np.ceil((len(tasks) + len(args.add)) / args.cols))
   figsize = args.size[0] * args.cols, args.size[1] * rows
-  fig, axes = plt.subplots(rows, args.cols, figsize=figsize)
+  fig, axes = plt.subplots(rows, args.cols, figsize=figsize, squeeze=False)
   for task, ax in zip(tasks, axes.flatten()):
     relevant = [r for r in runs if r.task == task]
     plot(task, ax, relevant, methods, args)
@@ -182,22 +177,22 @@ def figure(runs, methods, args):
     if name == 'median':
       plot_combined(
           'combined_median', ax, runs, methods, args,
-          lo='random', hi='human$',
+          lo='random', hi='human_gamer',
           agg=lambda x: np.nanmedian(x, -1))
     elif name == 'mean':
       plot_combined(
           'combined_mean', ax, runs, methods, args,
-          lo='random', hi='human$',
+          lo='random', hi='human_gamer',
           agg=lambda x: np.nanmean(x, -1))
     elif name == 'gamer_median':
       plot_combined(
           'combined_gamer_median', ax, runs, methods, args,
-          lo='random', hi='human$',
+          lo='random', hi='human_gamer',
           agg=lambda x: np.nanmedian(x, -1))
     elif name == 'gamer_mean':
       plot_combined(
           'combined_gamer_mean', ax, runs, methods, args,
-          lo='random', hi='human$',
+          lo='random', hi='human_gamer',
           agg=lambda x: np.nanmean(x, -1))
     elif name == 'record_mean':
       plot_combined(
@@ -209,17 +204,17 @@ def figure(runs, methods, args):
           'combined_clipped_record_mean', ax, runs, methods, args,
           lo='random', hi='record', clip=True,
           agg=lambda x: np.nanmean(x, -1))
-    elif name == 'num_seeds':
+    elif name == 'seeds':
       plot_combined(
-          'combined_num_seeds', ax, runs, methods, args,
-          agg=lambda x: np.isfinite(x).sum(-1))
+          'combined_seeds', ax, runs, methods, args,
+          agg=lambda x: np.isfinite(x).sum(-1), fill='nan')
     elif name == 'human_above':
       plot_combined(
-          'combined_above_human$', ax, runs, methods, args,
+          'combined_above_human_gamer', ax, runs, methods, args,
           agg=lambda y: (y >= 1.0).astype(float).sum(-1))
     elif name == 'human_below':
       plot_combined(
-          'combined_below_human$', ax, runs, methods, args,
+          'combined_below_human_gamer', ax, runs, methods, args,
           agg=lambda y: (y <= 1.0).astype(float).sum(-1))
     else:
       raise NotImplementedError(name)
@@ -280,7 +275,8 @@ def plot(task, ax, runs, methods, args):
 
 
 def plot_combined(
-    name, ax, runs, methods, args, agg, lo=None, hi=None, clip=False):
+    name, ax, runs, methods, args, agg, lo=None, hi=None, clip=False,
+    fill='last'):
   tasks = sorted(set(run.task for run in runs if run.xs is not None))
   seeds = list(set(run.seed for run in runs))
   runs = [r for r in runs if r.task in tasks]  # Discard unused baselines.
@@ -291,7 +287,7 @@ def plot_combined(
   for index, run in enumerate(runs):
     if run.xs is None:
       continue
-    xs, ys = bin_scores(run.xs, run.ys, borders)
+    xs, ys = bin_scores(run.xs, run.ys, borders, fill=fill)
     runs[index] = run._replace(xs=xs, ys=ys)
   # Per-task normalization by low and high baseline.
   if lo or hi:
@@ -407,7 +403,7 @@ def save(fig, args):
     print('Install texlive-extra-utils to crop PDF outputs.')
 
 
-def bin_scores(xs, ys, borders, reducer=np.nanmean):
+def bin_scores(xs, ys, borders, reducer=np.nanmean, fill='nan'):
   order = np.argsort(xs)
   xs, ys = xs[order], ys[order]
   binned = []
@@ -416,16 +412,23 @@ def bin_scores(xs, ys, borders, reducer=np.nanmean):
     for start, stop in zip(borders[:-1], borders[1:]):
       left = (xs <= start).sum()
       right = (xs <= stop).sum()
-      binned.append(reducer(ys[left:right]))
+      if left < right:
+        value = reducer(ys[left:right])
+      elif binned:
+        value = {'nan': np.nan, 'last': binned[-1]}[fill]
+      else:
+        value = np.nan
+      binned.append(value)
   return borders[1:], np.array(binned)
 
 
-def stack_scores(multiple_xs, multiple_ys):
+def stack_scores(multiple_xs, multiple_ys, fill='last'):
   longest_xs = sorted(multiple_xs, key=lambda x: len(x))[-1]
   multiple_padded_ys = []
   for xs, ys in zip(multiple_xs, multiple_ys):
     assert (longest_xs[:len(xs)] == xs).all(), (list(xs), list(longest_xs))
-    padding = [np.nan] * (len(longest_xs) - len(xs))
+    value = {'nan': np.nan, 'last': ys[-1]}[fill]
+    padding = [value] * (len(longest_xs) - len(xs))
     padded_ys = np.concatenate([ys, padding])
     multiple_padded_ys.append(padded_ys)
   stacked_ys = np.stack(multiple_padded_ys, -1)
@@ -485,15 +488,16 @@ def parse_args():
   boolean = lambda x: bool(['False', 'True'].index(x))
   parser = argparse.ArgumentParser()
   parser.add_argument('--indir', nargs='+', type=pathlib.Path, required=True)
+  parser.add_argument('--indir-prefix', type=pathlib.Path)
   parser.add_argument('--outdir', type=pathlib.Path, required=True)
   parser.add_argument('--subdir', type=boolean, default=True)
-  parser.add_argument('--xaxis', type=str, required=True)
-  parser.add_argument('--yaxis', type=str, required=True)
+  parser.add_argument('--xaxis', type=str, default='step')
+  parser.add_argument('--yaxis', type=str, default='eval_return')
   parser.add_argument('--tasks', nargs='+', default=[r'.*'])
   parser.add_argument('--methods', nargs='+', default=[r'.*'])
   parser.add_argument('--baselines', nargs='+', default=DEFAULT_BASELINES)
   parser.add_argument('--prefix', type=boolean, default=False)
-  parser.add_argument('--bins', type=float, default=-1)
+  parser.add_argument('--bins', type=float, default=3e5)
   parser.add_argument('--aggregate', type=str, default='std1')
   parser.add_argument('--size', nargs=2, type=float, default=[2.5, 2.3])
   parser.add_argument('--dpi', type=int, default=80)
@@ -511,10 +515,12 @@ def parse_args():
   parser.add_argument('--maxval', type=float, default=0)
   parser.add_argument('--add', nargs='+', type=str, default=[
       'gamer_median', 'gamer_mean', 'record_mean',
-      'clipped_record_mean', 'num_seeds'])
+      'clipped_record_mean', 'seeds'])
   args = parser.parse_args()
   if args.subdir:
     args.outdir /= args.indir[0].stem
+  if args.indir_prefix:
+    args.indir = [args.indir_prefix / indir for indir in args.indir]
   args.indir = [d.expanduser() for d in args.indir]
   args.outdir = args.outdir.expanduser()
   if args.labels:
