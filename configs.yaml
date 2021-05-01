@@ -153,11 +153,11 @@ atari:
 
   # Behavior
   actor_dist: 'onehot'
-  actor_entropy: 'linear(3e-3,3e-4,2.5e6)'
+  actor_entropy: '1e-3'
   expl_amount: 0.0
   discount: 0.999
-  imag_gradient: 'both'
-  imag_gradient_mix: 'linear(0.1,0,2.5e6)'
+  imag_gradient: 'reinforce'
+  imag_gradient_mix: '0'
 
   # Training
   discount_scale: 5.0
