@@ -1,0 +1,129 @@
+defaults:
+
+  # Train Script
+  logdir: /dev/null
+  seed: 0
+  task: dmc_walker_walk
+  num_envs: 1
+  steps: 1e8
+  eval_every: 1e5
+  action_repeat: 1
+  time_limit: 0
+  prefill: 10000
+  image_size: [64, 64]
+  grayscale: False
+  replay_size: 2e6
+  dataset: {batch: 50, length: 50, oversample_ends: True}
+  train_gifs: False
+  precision: 16
+  jit: True
+
+  # Agent
+  log_every: 1e4
+  train_every: 5
+  train_steps: 1
+  pretrain: 0
+  clip_rewards: identity
+  expl_noise: 0.0
+  expl_behavior: greedy
+  expl_until: 0
+  eval_noise: 0.0
+  eval_state_mean: False
+
+  # World Model
+  pred_discount: True
+  grad_heads: [image, reward, discount]
+  rssm: {hidden: 400, deter: 400, stoch: 32, discrete: 32, act: elu, std_act: sigmoid2, min_std: 0.1}
+  encoder: {depth: 48, act: elu, kernels: [4, 4, 4, 4], keys: [image]}
+  decoder: {depth: 48, act: elu, kernels: [5, 5, 6, 6]}
+  reward_head: {layers: 4, units: 400, act: elu, dist: mse}
+  discount_head: {layers: 4, units: 400, act: elu, dist: binary}
+  loss_scales: {kl: 1, reward: 1, discount: 1}
+  kl: {free: 0.0, forward: False, balance: 0.8, free_avg: True}
+  model_opt: {opt: adam, lr: 3e-4, eps: 1e-5, clip: 100, wd: 1e-6}
+
+  # Actor Critic
+  actor: {layers: 4, units: 400, act: elu, dist: trunc_normal, min_std: 0.1}
+  critic: {layers: 4, units: 400, act: elu, dist: mse}
+  actor_opt: {opt: adam, lr: 1e-4, eps: 1e-5, clip: 100, wd: 1e-6}
+  critic_opt: {opt: adam, lr: 1e-4, eps: 1e-5, clip: 100, wd: 1e-6}
+  discount: 0.99
+  discount_lambda: 0.95
+  imag_horizon: 15
+  actor_grad: both
+  actor_grad_mix: '0.1'
+  actor_ent: '1e-4'
+  slow_target: True
+  slow_target_update: 100
+  slow_target_fraction: 1
+
+  # Exploration
+  expl_extr_scale: 0.0
+  expl_intr_scale: 1.0
+  expl_opt: {opt: adam, lr: 3e-4, eps: 1e-5, clip: 100, wd: 1e-6}
+  expl_head: {layers: 4, units: 400, act: elu, dist: mse}
+  disag_target: stoch
+  disag_log: True
+  disag_models: 10
+  disag_offset: 1
+  disag_action_cond: True
+  expl_model_loss: kl
+
+atari:
+
+  task: atari_pong
+  time_limit: 108000  # 30 minutes of game play.
+  action_repeat: 4
+  steps: 2e8
+  eval_every: 1e5
+  log_every: 1e5
+  prefill: 200000
+  grayscale: True
+  train_every: 16
+  clip_rewards: tanh
+  rssm: {hidden: 600, deter: 600, stoch: 32, discrete: 32}
+  actor.dist: onehot
+  model_opt.lr: 2e-4
+  actor_opt.lr: 4e-5
+  critic_opt.lr: 1e-4
+  actor_ent: 1e-3
+  discount: 0.999
+  actor_grad: reinforce
+  actor_grad_mix: 0
+  loss_scales.kl: 0.1
+  loss_scales.discount: 5.0
+  .*\.wd$: 1e-6
+
+dmc:
+
+  task: dmc_walker_walk
+  time_limit: 1000
+  action_repeat: 2
+  eval_every: 1e4
+  log_every: 1e4
+  prefill: 5000
+  train_every: 5
+  pretrain: 100
+  pred_discount: False
+  grad_heads: [image, reward]
+  rssm: {hidden: 200, deter: 200}
+  model_opt.lr: 3e-4
+  actor_opt.lr: 8e-5
+  critic_opt.lr: 8e-5
+  actor_ent: 1e-4
+  discount: 0.99
+  actor_grad: dynamics
+  kl.free: 1.0
+  dataset.oversample_ends: False
+
+debug:
+
+  jit: False
+  time_limit: 100
+  eval_every: 300
+  log_every: 300
+  prefill: 100
+  pretrain: 1
+  train_steps: 1
+  dataset.batch: 10
+  dataset.length: 10

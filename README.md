@@ -58,9 +58,8 @@ For more information:
 Get dependencies:
 
 ```sh
-pip3 install --user tensorflow==2.3.1
-pip3 install --user tensorflow_probability==0.11.1
-pip3 install --user pandas
+pip3 install --user tensorflow==2.5.0
+pip3 install --user tensorflow_probability==0.12.2
 pip3 install --user matplotlib
 pip3 install --user ruamel.yaml
 pip3 install --user 'gym[atari]'
@@ -69,8 +68,7 @@ pip3 install --user 'gym[atari]'
 Train the agent:
 
 ```sh
-python3 dreamer.py --logdir ~/logdir/atari_pong/dreamerv2/1 \
-    --configs defaults atari --task atari_pong
+python3 dreamerv2/train.py --logdir ~/logdir/atari_pong/dreamerv2/1 --configs defaults atari --task atari_pong
 ```
 
 Monitor results:
@@ -82,7 +80,7 @@ tensorboard --logdir ~/logdir
 Generate plots:
 
 ```sh
-python3 plotting.py --indir ~/logdir --outdir ~/plots --xaxis step --yaxis eval_return --bins 1e6
+python3 common/plot.py --indir ~/logdir --outdir ~/plots --xaxis step --yaxis eval_return --bins 1e6
 ```
 
 Tips:
@@ -100,7 +98,6 @@ principle cause numerical instabilities.
 - **Accessing logged metrics.** The metrics are stored in both TensorBoard and
 JSON lines format. You can directly load them using `pandas.read_json()`. The
 plotting script also stores the binned and aggregated metrics of multiple runs
-into a single JSON lines file for easy manual plotting.
+into a single JSON file for easy manual plotting.
 
 [mixed]: https://www.tensorflow.org/guide/mixed_precision
-
