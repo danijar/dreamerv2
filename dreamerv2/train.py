@@ -67,6 +67,8 @@ logger = elements.Logger(step, outputs, multiplier=config.action_repeat)
 metrics = collections.defaultdict(list)
 should_train = elements.Every(config.train_every)
 should_log = elements.Every(config.log_every)
+should_video_train = elements.Every(config.eval_every)
+should_video_eval = elements.Every(config.eval_every)
 
 def make_env(mode):
   suite, task = config.task.split('_', 1)
@@ -95,7 +97,8 @@ def per_episode(ep, mode):
   logger.scalar(f'{mode}_return', score)
   logger.scalar(f'{mode}_length', length)
   logger.scalar(f'{mode}_eps', replay_.num_episodes)
-  if mode == 'eval' or config.train_gifs:
+  should = {'train': should_video_train, 'eval': should_video_eval}[mode]
+  if should(step):
     logger.video(f'{mode}_policy', ep['image'])
   logger.write()
 
@@ -112,7 +115,7 @@ eval_driver.on_episode(lambda ep: per_episode(ep, mode='eval'))
 prefill = max(0, config.prefill - train_replay.total_steps)
 if prefill:
   print(f'Prefill dataset ({prefill} steps).')
-  random_agent = common.RandomAgent(action_space, logprob=True)
+  random_agent = common.RandomAgent(action_space)
   train_driver(random_agent, steps=prefill, episodes=1)
   eval_driver(random_agent, episodes=1)
   train_driver.reset()
@@ -146,7 +149,8 @@ while step < config.steps:
   logger.write()
   print('Start evaluation.')
   logger.add(agnt.report(next(eval_dataset)), prefix='eval')
-  eval_driver(functools.partial(agnt.policy, mode='eval'), episodes=1)
+  eval_policy = functools.partial(agnt.policy, mode='eval')
+  eval_driver(eval_policy, episodes=config.eval_eps)
   print('Start training.')
   train_driver(agnt.policy, steps=config.eval_every)
   agnt.save(logdir / 'variables.pkl')

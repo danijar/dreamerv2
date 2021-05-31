@@ -52,18 +52,15 @@ class Agent(common.Module):
     if mode == 'eval':
       actor = self._task_behavior.actor(feat)
       action = actor.mode()
-      logprob = actor.log_prob(action)
     elif self._should_expl(self.step):
       actor = self._expl_behavior.actor(feat)
       action = actor.sample()
-      logprob = actor.log_prob(action)
     else:
       actor = self._task_behavior.actor(feat)
       action = actor.sample()
-      logprob = actor.log_prob(action)
     noise = {'train': self.config.expl_noise, 'eval': self.config.eval_noise}
     action = common.action_noise(action, noise[mode], self._action_space)
-    outputs = {'action': action, 'logprob': logprob}
+    outputs = {'action': action}
     state = (latent, action)
     return outputs, state
 

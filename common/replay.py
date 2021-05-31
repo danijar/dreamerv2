@@ -1,7 +1,7 @@
-import pathlib
 import datetime
-import uuid
 import io
+import pathlib
+import uuid
 
 import numpy as np
 import tensorflow as tf
@@ -84,7 +84,7 @@ def sample_episodes(episodes, length=None, balance=False, seed=0):
       total = len(next(iter(episode.values())))
       available = total - length
       if available < 1:
-        print(f'Skipped short episode of length {available}.')
+        print(f'Skipped short episode of length {total}.')
         continue
       if balance:
         index = min(random.randint(0, total), available)

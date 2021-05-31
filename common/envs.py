@@ -244,23 +244,6 @@ class OneHotAction:
     return reference
 
 
-class ActionDict:
-
-  def __init__(self, env, key='action'):
-    self._env = env
-    self._key = key
-
-  def __getattr__(self, name):
-    return getattr(self._env, name)
-
-  @property
-  def action_space(self):
-    return gym.spaces.Dict({self._key: self._env.action_space})
-
-  def step(self, action):
-    return self._env.step(action[self._key])
-
-
 class RewardObs:
 
   def __init__(self, env, key='reward'):
