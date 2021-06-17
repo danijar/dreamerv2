@@ -58,12 +58,17 @@ For more information:
 Get dependencies:
 
 ```sh
-pip3 install --user tensorflow==2.5.0
-pip3 install --user tensorflow_probability==0.12.2
-pip3 install --user matplotlib
-pip3 install --user ruamel.yaml
-pip3 install --user elements
-pip3 install --user 'gym[atari]'
+apt install -y \
+    python3 python3-pip curl unrar unzip ffmpeg libsm6 libxext6
+pip3 install --no-cache --upgrade pip setuptool
+pip3 install -r requirements.txt
+curl -L http://www.atarimania.com/roms/Roms.rar > ./Roms.rar
+unzip ROMS.zip
+unrar x Roms.rar
+python3 -m atari_py.import_roms ./ROMS
+rm ROMS.zip
+rm Roms.rar
+rm -r ./ROMS
 ```
 
 Train the agent:
