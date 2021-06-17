@@ -55,20 +55,11 @@ For more information:
 
 ## Instructions
 
-Get dependencies:
+build the docker image and start the image with an interactive shell:
 
 ```sh
-apt install -y \
-    python3 python3-pip curl unrar unzip ffmpeg libsm6 libxext6
-pip3 install --no-cache --upgrade pip setuptool
-pip3 install -r requirements.txt
-curl -L http://www.atarimania.com/roms/Roms.rar > ./Roms.rar
-unzip ROMS.zip
-unrar x Roms.rar
-python3 -m atari_py.import_roms ./ROMS
-rm ROMS.zip
-rm Roms.rar
-rm -r ./ROMS
+docker build -f Dockerfile -t DreamerV2 .
+docker run -it DreamerV2 sh
 ```
 
 Train the agent:

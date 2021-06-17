@@ -8,8 +8,8 @@ RUN pip3 install --no-cache --upgrade pip setuptools
 RUN pip3 install -r requirements.txt
 RUN curl -L http://www.atarimania.com/roms/Roms.rar > /tmp/Roms.rar
 WORKDIR /tmp
-RUN unzip ROMS.zip
 RUN unrar x Roms.rar
+RUN unzip ROMS.zip
 RUN python3 -m atari_py.import_roms /tmp/ROMS
 WORKDIR /app
 RUN rm -rf /tmp
