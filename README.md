@@ -58,7 +58,7 @@ For more information:
 build the docker image and start the image with an interactive shell:
 
 ```sh
-docker build -f Dockerfile -t DreamerV2 .
+docker build -t DreamerV2 git://github.com/danijar/DreamerV2#main
 docker run -it DreamerV2 sh
 ```
 
