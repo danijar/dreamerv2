@@ -55,10 +55,14 @@ For more information:
 
 ## Instructions
 
+You can either follow the steps here or use the
+[Dockerfile](https://github.com/danijar/dreamerv2/blob/main/Dockerfile)
+provided in the repository.
+
 Get dependencies:
 
 ```sh
-pip3 install --user tensorflow==2.5.0
+pip3 install --user tensorflow==2.4.2
 pip3 install --user tensorflow_probability==0.12.2
 pip3 install --user matplotlib
 pip3 install --user ruamel.yaml
