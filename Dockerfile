@@ -39,7 +39,6 @@ RUN mkdir -p /root/.mujoco && \
 # Python packages.
 RUN pip3 install --no-cache-dir \
   'gym[atari]' \
-  elements \
   dm_control \
   ruamel.yaml \
   tensorflow_probability==0.12.2

@@ -66,7 +66,6 @@ pip3 install --user tensorflow==2.4.2
 pip3 install --user tensorflow_probability==0.12.2
 pip3 install --user matplotlib
 pip3 install --user ruamel.yaml
-pip3 install --user elements
 pip3 install --user 'gym[atari]'
 ```
 

@@ -1,7 +1,6 @@
 import tensorflow as tf
 from tensorflow.keras import mixed_precision as prec
 
-import elements
 import common
 import expl
 
@@ -13,7 +12,7 @@ class Agent(common.Module):
     self._logger = logger
     self._action_space = actspce
     self._num_act = actspce.n if hasattr(actspce, 'n') else actspce.shape[0]
-    self._should_expl = elements.Until(int(
+    self._should_expl = common.Until(int(
         config.expl_until / config.action_repeat))
     self._counter = step
     with tf.device('cpu:0'):

@@ -24,18 +24,16 @@ import ruamel.yaml as yaml
 import tensorflow as tf
 
 import agent
-import elements
 import common
 
 
 configs = pathlib.Path(sys.argv[0]).parent / 'configs.yaml'
 configs = yaml.safe_load(configs.read_text())
-config = elements.Config(configs['defaults'])
-parsed, remaining = elements.FlagParser(configs=['defaults']).parse_known(
-    exit_on_help=False)
+parsed, remaining = common.Flags(configs=['defaults']).parse(known_only=True)
+config = common.Config(configs['defaults'])
 for name in parsed.configs:
   config = config.update(configs[name])
-config = elements.FlagParser(config).parse(remaining)
+config = common.Flags(config).parse(remaining)
 logdir = pathlib.Path(config.logdir).expanduser()
 config = config.update(
     steps=config.steps // config.action_repeat,
@@ -57,18 +55,18 @@ if config.precision == 16:
 print('Logdir', logdir)
 train_replay = common.Replay(logdir / 'train_replay', config.replay_size)
 eval_replay = common.Replay(logdir / 'eval_replay', config.time_limit or 1)
-step = elements.Counter(train_replay.total_steps)
+step = common.Counter(train_replay.total_steps)
 outputs = [
-    elements.TerminalOutput(),
-    elements.JSONLOutput(logdir),
-    elements.TensorBoardOutput(logdir),
+    common.TerminalOutput(),
+    common.JSONLOutput(logdir),
+    common.TensorBoardOutput(logdir),
 ]
-logger = elements.Logger(step, outputs, multiplier=config.action_repeat)
+logger = common.Logger(step, outputs, multiplier=config.action_repeat)
 metrics = collections.defaultdict(list)
-should_train = elements.Every(config.train_every)
-should_log = elements.Every(config.log_every)
-should_video_train = elements.Every(config.eval_every)
-should_video_eval = elements.Every(config.eval_every)
+should_train = common.Every(config.train_every)
+should_log = common.Every(config.log_every)
+should_video_train = common.Every(config.eval_every)
+should_video_eval = common.Every(config.eval_every)
 
 def make_env(mode):
   suite, task = config.task.split('_', 1)
