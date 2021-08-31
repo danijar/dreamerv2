@@ -50,8 +50,8 @@ defaults:
   discount: 0.99
   discount_lambda: 0.95
   imag_horizon: 15
-  actor_grad: both
-  actor_grad_mix: '0.1'
+  actor_grad: reinforce
+  actor_grad_mix: 0.0
   actor_ent: '1e-4'
   slow_target: True
   slow_target_update: 100
@@ -89,8 +89,28 @@ atari:
   actor_ent: 1e-3
   discount: 0.999
   actor_grad: reinforce
-  actor_grad_mix: 0
   loss_scales.kl: 0.1
+  loss_scales.discount: 5.0
+  .*\.wd$: 1e-6
+
+crafter:
+
+  task: crafter_reward
+  steps: 5e6
+  eval_every: 1e6
+  log_every: 1e5
+  prefill: 50000
+  train_every: 16
+  dataset.batch: 16
+  rssm: {hidden: 2048, deter: 2048, stoch: 32, discrete: 32}
+  actor.dist: onehot
+  model_opt.lr: 1e-4
+  actor_opt.lr: 1e-4
+  critic_opt.lr: 1e-4
+  actor_ent: 3e-3
+  discount: 0.999
+  actor_grad: reinforce
+  loss_scales.reward: 10
   loss_scales.discount: 5.0
   .*\.wd$: 1e-6
 

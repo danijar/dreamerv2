@@ -11,6 +11,13 @@
 #   python3 dreamerv2/train.py --logdir "/logdir/$(date +%Y%m%d-%H%M%S)" \
 #   --configs defaults atari --task atari_pong
 #
+# Crafter:
+#
+# docker build -t dreamerv2 .
+# docker run -it --rm --gpus all -v ~/logdir:/logdir dreamerv2 \
+#   python3 dreamerv2/train.py --logdir "/logdir/$(date +%Y%m%d-%H%M%S)" \
+#   --configs defaults crafter
+#
 # DMC:
 #
 # docker build -t dreamerv2 . --build-arg MUJOCO_KEY="$(cat ~/.mujoco/mjkey.txt)"
@@ -39,6 +46,8 @@ RUN mkdir -p /root/.mujoco && \
 # Python packages.
 RUN pip3 install --no-cache-dir \
   'gym[atari]' \
+  atari_py \
+  crafter \
   dm_control \
   ruamel.yaml \
   tensorflow_probability==0.12.2

@@ -127,6 +127,55 @@ class Atari:
     return self._env.render(mode)
 
 
+class Crafter:
+
+  def __init__(self, outdir=None, seed=None):
+    import crafter
+    self._env = crafter.Env(seed=seed)
+    if outdir:
+      self._env = crafter.Recorder(
+          self._env, outdir,
+          save_episode=True,
+          save_video=False,
+          include_image=False,
+      )
+    self._achievements = crafter.constants.achievements.copy()
+
+  @property
+  def observation_space(self):
+    spaces = {'image': self._env.observation_space}
+    for name in self._achievements:
+      spaces[name] = gym.spaces.Box(0, 2 ** 31, (), np.int32)
+    return gym.spaces.Dict(spaces)
+
+  @property
+  def action_space(self):
+    return gym.spaces.Dict({'action': self._env.action_space})
+
+  def close(self):
+    pass
+
+  def reset(self):
+    image = self._env.reset()
+    obs = {'image': image}
+    obs.update({
+        f'log_achievement_{name}': 0
+        for name in self._achievements})
+    return obs
+
+  def step(self, action):
+    action = action['action']
+    image, reward, done, info = self._env.step(action)
+    obs = {'image': image}
+    obs.update({
+        f'log_achievement_{key}': value
+        for key, value in info['achievements'].items()})
+    return obs, reward, done, info
+
+  def render(self, mode):
+    return self._env.render()
+
+
 class Dummy:
 
   def __init__(self):
@@ -168,7 +217,7 @@ class TimeLimit:
     assert self._step is not None, 'Must reset environment.'
     obs, reward, done, info = self._env.step(action)
     self._step += 1
-    if self._step >= self._duration:
+    if self._duration and self._step >= self._duration:
       done = True
       if 'discount' not in info:
         info['discount'] = np.array(1.0).astype(np.float32)
@@ -209,7 +258,7 @@ class NormalizeAction:
 class OneHotAction:
 
   def __init__(self, env, key='action'):
-    assert isinstance(env.action_space[key], gym.spaces.Discrete)
+    assert hasattr(env.action_space[key], 'n')
     self._env = env
     self._key = key
     self._random = np.random.RandomState()

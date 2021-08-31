@@ -78,6 +78,10 @@ def make_env(mode):
         task, config.action_repeat, config.image_size, config.grayscale,
         life_done=False, sticky_actions=True, all_actions=True)
     env = common.OneHotAction(env)
+  elif suite == 'crafter':
+    outdir = logdir / 'crafter' if mode == 'train' else None
+    env = common.Crafter(outdir)
+    env = common.OneHotAction(env)
   else:
     raise NotImplementedError(suite)
   env = common.TimeLimit(env, config.time_limit)
