@@ -1,30 +1,3 @@
-# Instructions
-#
-# Test your setup:
-#
-# docker run -it --rm --gpus all tensorflow/tensorflow:2.4.2-gpu nvidia-smi
-#
-# Atari:
-#
-# docker build -t dreamerv2 .
-# docker run -it --rm --gpus all -v ~/logdir:/logdir dreamerv2 \
-#   python3 dreamerv2/train.py --logdir "/logdir/$(date +%Y%m%d-%H%M%S)" \
-#   --configs defaults atari --task atari_pong
-#
-# Crafter:
-#
-# docker build -t dreamerv2 .
-# docker run -it --rm --gpus all -v ~/logdir:/logdir dreamerv2 \
-#   python3 dreamerv2/train.py --logdir "/logdir/$(date +%Y%m%d-%H%M%S)" \
-#   --configs defaults crafter
-#
-# DMC:
-#
-# docker build -t dreamerv2 . --build-arg MUJOCO_KEY="$(cat ~/.mujoco/mjkey.txt)"
-# docker run -it --rm --gpus all -v ~/logdir:/logdir dreamerv2 \
-#   python3 dreamerv2/train.py --logdir "/logdir/$(date +%Y%m%d-%H%M%S)" \
-#   --configs defaults dmc --task dmc_walker_walk
-
 FROM tensorflow/tensorflow:2.4.2-gpu
 
 # System packages.

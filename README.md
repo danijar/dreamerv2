@@ -53,26 +53,28 @@ For more information:
 - [Project website](https://danijar.com/dreamerv2/)
 - [Research paper](https://arxiv.org/pdf/2010.02193.pdf)
 
-## Instructions
+## Manual Instructions
 
-You can either follow the steps here or use the
-[Dockerfile](https://github.com/danijar/dreamerv2/blob/main/Dockerfile)
-provided in the repository.
+The instructions are for running the DreamerV2 repository on your local
+computer, which allows you to modify the agent. See the following sections for
+alternative ways to run the agent.
 
 Get dependencies:
 
 ```sh
-pip3 install --user tensorflow==2.4.2
-pip3 install --user tensorflow_probability==0.12.2
-pip3 install --user matplotlib
-pip3 install --user ruamel.yaml
-pip3 install --user 'gym[atari]'
+pip3 install tensorflow==2.4.2 tensorflow_probability==0.12.2 matplotlib ruamel.yaml 'gym[atari]'
 ```
 
-Train the agent:
+Train on Atari:
 
 ```sh
 python3 dreamerv2/train.py --logdir ~/logdir/atari_pong/dreamerv2/1 --configs defaults atari --task atari_pong
+```
+
+Train on Control Suite:
+
+```sh
+python3 dreamerv2/train.py --logdir ~/logdir/dmc_walker_walk/dreamerv2/1 --configs defaults dmc --task dmc_walker_walk
 ```
 
 Monitor results:
@@ -87,7 +89,71 @@ Generate plots:
 python3 common/plot.py --indir ~/logdir --outdir ~/plots --xaxis step --yaxis eval_return --bins 1e6
 ```
 
-Tips:
+## Docker Instructions
+
+The [Dockerfile](https://github.com/danijar/dreamerv2/blob/main/Dockerfile)
+lets you run DreamerV2 without installing its dependencies in your system. This
+requires you to have Docker with GPU access set up.
+
+Check your setup:
+
+```sh
+docker run -it --rm --gpus all tensorflow/tensorflow:2.4.2-gpu nvidia-smi
+```
+
+Train on Atari:
+
+```sh
+docker build -t dreamerv2 .
+docker run -it --rm --gpus all -v ~/logdir:/logdir dreamerv2 \
+  python3 dreamerv2/train.py --logdir /logdir/atari_pong/dreamerv2/1 --configs defaults atari --task atari_pong
+```
+
+Train on Control Suite:
+
+```sh
+docker build -t dreamerv2 . --build-arg MUJOCO_KEY="$(cat ~/.mujoco/mjkey.txt)"
+docker run -it --rm --gpus all -v ~/logdir:/logdir dreamerv2 \
+  python3 dreamerv2/train.py --logdir /logdir/dmc_walker_walk/dreamerv2/1 --configs defaults dmc --task dmc_walker_walk
+```
+
+## External Instructions
+
+You can also use DreamerV2 as a package if you just want to run it on a custom
+env without modifying the agent.
+
+Install package:
+
+```sh
+pip3 install dreamerv2
+```
+
+Example script:
+
+```python
+import gym
+import gym_minigrid
+import dreamerv2
+
+def make_env(config, mode='train'):
+  env = gym.make('MiniGrid-DoorKey-6x6-v0')
+  env = gym_minigrid.wrappers.RGBImgPartialObsWrapper(env)
+  env = dreamerv2.DictSpaces(env)
+  env = dreamerv2.ResizeImage(env, (64, 64))
+  return env
+
+config = dreamerv2.Config(dreamerv2.configs['defaults'])
+config = config.update({
+    **dreamerv2.configs['crafter'],
+    'logdir': '~/logdir/minigrid',
+    'dataset.batch': 16,
+    'dataset.length': 32,
+})
+
+dreamerv2.run(make_env, config)
+```
+
+## Tips
 
 - **Efficient debugging.** You can use the `debug` config as in `--configs
 defaults atari debug`. This reduces the batch size, increases the evaluation

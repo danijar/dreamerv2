@@ -97,7 +97,7 @@ crafter:
 
   task: crafter_reward
   steps: 5e6
-  eval_every: 1e6
+  eval_every: 1e5
   log_every: 1e5
   prefill: 50000
   train_every: 16

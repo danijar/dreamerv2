@@ -203,6 +203,49 @@ class Dummy:
     return obs
 
 
+class DictSpaces:
+
+  def __init__(self, env, obs_key='image', act_key='action'):
+    self._env = env
+    if hasattr(env.observation_space, 'spaces'):
+      obs_key = False
+    if hasattr(env.action_space, 'spaces'):
+      act_key = False
+    self._obs_key = obs_key
+    self._act_key = act_key
+
+  def __getattr__(self, name):
+    return getattr(self._env, name)
+
+  @property
+  def observation_space(self):
+    space = self._env.observation_space
+    if self._obs_key:
+      space = gym.spaces.Dict({self._obs_key: space})
+    return space
+
+  @property
+  def action_space(self):
+    space = self._env.action_space
+    if self._act_key:
+      space = gym.spaces.Dict({self._act_key: space})
+    return space
+
+  def step(self, action):
+    if self._act_key:
+      action = action[self._act_key]
+    obs, reward, done, info = self._env.step(action)
+    if self._obs_key:
+      obs = {self._obs_key: obs}
+    return obs, reward, done, info
+
+  def reset(self):
+    obs = self._env.reset()
+    if self._obs_key:
+      obs = {self._obs_key: obs}
+    return obs
+
+
 class TimeLimit:
 
   def __init__(self, env, duration):
@@ -291,6 +334,42 @@ class OneHotAction:
     reference = np.zeros(actions, dtype=np.float32)
     reference[index] = 1.0
     return reference
+
+
+class ResizeImage:
+
+  def __init__(self, env, size=(64, 64), key='image'):
+    assert key in env.observation_space.spaces
+    self._env = env
+    self._key = key
+    self._shape = size
+
+  def __getattr__(self, name):
+    return getattr(self._env, name)
+
+  @property
+  def observation_space(self):
+    spaces = self._env.observation_space.spaces
+    shape = self._shape + spaces[self._key].shape[2:]
+    spaces[self._key] = gym.spaces.Box(0, 255, shape, np.uint8)
+    return gym.spaces.Dict(spaces)
+
+  def step(self, action):
+    obs, reward, done, info = self._env.step(action)
+    obs[self._key] = self._resize(obs[self._key])
+    return obs, reward, done, info
+
+  def reset(self):
+    obs = self._env.reset()
+    obs[self._key] = self._resize(obs[self._key])
+    return obs
+
+  def _resize(self, image):
+    from PIL import Image
+    image = Image.fromarray(image)
+    image = image.resize(self._shape, Image.NEAREST)
+    image = np.array(image)
+    return image
 
 
 class RewardObs:
