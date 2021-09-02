@@ -55,7 +55,7 @@ def main():
   run(make_env, config)
 
 
-def run(make_env, config):
+def run(make_env, config, outputs=None):
 
   def wrapped_make_env(mode):
     env = make_env(mode)
@@ -91,7 +91,7 @@ def run(make_env, config):
   train_replay = common.Replay(logdir / 'train_replay', config.replay_size)
   eval_replay = common.Replay(logdir / 'eval_replay', config.time_limit or 1)
   step = common.Counter(train_replay.total_steps)
-  outputs = [
+  outputs = outputs or [
       common.TerminalOutput(),
       common.JSONLOutput(logdir),
       common.TensorBoardOutput(logdir),

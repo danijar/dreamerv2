@@ -85,7 +85,7 @@ class TerminalOutput:
 class JSONLOutput:
 
   def __init__(self, logdir):
-    self._logdir = pathlib.Path(logdir)
+    self._logdir = pathlib.Path(logdir).expanduser()
 
   def __call__(self, summaries):
     scalars = {k: float(v) for _, k, v in summaries if len(v.shape) == 0}
@@ -98,6 +98,7 @@ class TensorBoardOutput:
 
   def __init__(self, logdir, fps=20):
     import tensorflow as tf
+    logdir = pathlib.Path(logdir).expanduser()
     self._writer = tf.summary.create_file_writer(str(logdir), max_queue=1000)
     self._fps = fps
 
