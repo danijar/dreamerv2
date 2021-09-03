@@ -135,13 +135,6 @@ import gym
 import gym_minigrid
 import dreamerv2
 
-def make_env(config, mode='train'):
-  env = gym.make('MiniGrid-DoorKey-6x6-v0')
-  env = gym_minigrid.wrappers.RGBImgPartialObsWrapper(env)
-  env = dreamerv2.DictSpaces(env)
-  env = dreamerv2.ResizeImage(env, (64, 64))
-  return env
-
 config = dreamerv2.Config(dreamerv2.configs['defaults'])
 config = config.update({
     **dreamerv2.configs['crafter'],
@@ -149,6 +142,14 @@ config = config.update({
     'dataset.batch': 16,
     'dataset.length': 32,
 })
+config = dreamerv2.Flags(config).parse()
+
+def make_env(mode='train'):
+  env = gym.make('MiniGrid-DoorKey-6x6-v0')
+  env = gym_minigrid.wrappers.RGBImgPartialObsWrapper(env)
+  env = dreamerv2.DictSpaces(env)
+  env = dreamerv2.ResizeImage(env, (64, 64))
+  return env
 
 dreamerv2.run(make_env, config)
 ```
