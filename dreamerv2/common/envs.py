@@ -132,13 +132,12 @@ class Crafter:
   def __init__(self, outdir=None, seed=None):
     import crafter
     self._env = crafter.Env(seed=seed)
-    if outdir:
-      self._env = crafter.Recorder(
-          self._env, outdir,
-          save_episode=True,
-          save_video=False,
-          include_image=False,
-      )
+    self._env = crafter.Recorder(
+        self._env, outdir,
+        save_stats=True,
+        save_video=False,
+        save_episode=False,
+    )
     self._achievements = crafter.constants.achievements.copy()
 
   @property

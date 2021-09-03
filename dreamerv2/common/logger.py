@@ -86,12 +86,15 @@ class JSONLOutput:
 
   def __init__(self, logdir):
     self._logdir = pathlib.Path(logdir).expanduser()
+    # We keep the file handle open because some cloud storage systems cannot
+    # handle quickly re-opening the file many times.
+    self._file_handle = (self._logdir / 'metrics.jsonl').open('a')
 
   def __call__(self, summaries):
     scalars = {k: float(v) for _, k, v in summaries if len(v.shape) == 0}
     step = max(s for s, _, _, in summaries)
-    with (self._logdir / 'metrics.jsonl').open('a') as f:
-      f.write(json.dumps({'step': step, **scalars}) + '\n')
+    self._file_handle.write(json.dumps({'step': step, **scalars}) + '\n')
+    self._file_handle.flush()
 
 
 class TensorBoardOutput:

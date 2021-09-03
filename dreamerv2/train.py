@@ -47,8 +47,8 @@ def main():
           task, config.action_repeat, config.image_size, config.grayscale,
           life_done=False, sticky_actions=True, all_actions=True)
     elif suite == 'crafter':
-      return common.Crafter(
-          outdir=mode == 'train' and pathlib.Path(config.logdir) / 'crafter')
+      outdir = pathlib.Path(config.logdir) / 'crafter'
+      return common.Crafter(outdir if mode == 'train' else None)
     else:
       raise NotImplementedError(suite)
 
