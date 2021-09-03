@@ -103,13 +103,12 @@ class TensorBoardOutput:
   def __init__(self, logdir, fps=20):
     self._logdir = pathlib.Path(logdir).expanduser()
     self._logdir.mkdir(exist_ok=True, parents=True)
-    import tensorflow as tf
-    self._writer = tf.summary.create_file_writer(
-        str(self._logdir), max_queue=1000)
+    self._writer = None
     self._fps = fps
 
   def __call__(self, summaries):
     import tensorflow as tf
+    self._ensure_writer()
     self._writer.set_as_default()
     for step, name, value in summaries:
       if len(value.shape) == 0:
@@ -138,6 +137,12 @@ class TensorBoardOutput:
     except (IOError, OSError) as e:
       print('GIF summaries require ffmpeg in $PATH.', e)
       tf.summary.image(name, video, step)
+
+  def _ensure_writer(self):
+    if not self._writer:
+      import tensorflow as tf
+      self._writer = tf.summary.create_file_writer(
+          str(self._logdir), max_queue=1000)
 
 
 def encode_gif(frames, fps):
