@@ -48,6 +48,8 @@ class Flags:
       return parsed
 
   def _submit_entry(self, key, vals, parsed, remaining):
+    if not key and not vals:
+      return
     if not key:
       vals = ', '.join(f"'{x}'" for x in vals)
       raise ValueError(f"Values {vals} were not preceeded by any flag.")
