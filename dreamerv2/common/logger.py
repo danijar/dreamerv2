@@ -86,6 +86,7 @@ class JSONLOutput:
 
   def __init__(self, logdir):
     self._logdir = pathlib.Path(logdir).expanduser()
+    self._logdir.mkdir(exist_ok=True, parents=True)
     # We keep the file handle open because some cloud storage systems cannot
     # handle quickly re-opening the file many times.
     self._file_handle = (self._logdir / 'metrics.jsonl').open('a')
@@ -100,9 +101,11 @@ class JSONLOutput:
 class TensorBoardOutput:
 
   def __init__(self, logdir, fps=20):
+    self._logdir = pathlib.Path(logdir).expanduser()
+    self._logdir.mkdir(exist_ok=True, parents=True)
     import tensorflow as tf
-    logdir = pathlib.Path(logdir).expanduser()
-    self._writer = tf.summary.create_file_writer(str(logdir), max_queue=1000)
+    self._writer = tf.summary.create_file_writer(
+        str(self._logdir), max_queue=1000)
     self._fps = fps
 
   def __call__(self, summaries):
