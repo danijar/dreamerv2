@@ -64,7 +64,8 @@ class Plan2Explore(common.Module):
       action = tf.cast(data['action'], inputs.dtype)
       inputs = tf.concat([inputs, action], -1)
     metrics.update(self._train_ensemble(inputs, target))
-    metrics.update(self.ac.train(self.wm, start, self._intr_reward))
+    metrics.update(self.ac.train(
+        self.wm, start, data['is_terminal'], self._intr_reward))
     return None, metrics
 
   def _intr_reward(self, seq):
@@ -112,7 +113,8 @@ class ModelLoss(common.Module):
     with tf.GradientTape() as tape:
       loss = -self.head(context['feat']).log_prob(target).mean()
     metrics.update(self.opt(tape, loss, self.head))
-    metrics.update(self.ac.train(self.wm, start, self._intr_reward))
+    metrics.update(self.ac.train(
+        self.wm, start, data['is_terminal'], self._intr_reward))
     return None, metrics
 
   def _intr_reward(self, seq):

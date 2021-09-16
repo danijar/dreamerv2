@@ -6,17 +6,23 @@ defaults:
   task: dmc_walker_walk
   envs: 1
   envs_parallel: none
+  discrete: False
   render_size: [64, 64]
   dmc_camera: -1
   atari_grayscale: True
   time_limit: 0
   action_repeat: 1
   steps: 1e8
+  log_every: 1e4
   eval_every: 1e5
   eval_eps: 1
   prefill: 10000
+  pretrain: 1
+  train_every: 5
+  train_steps: 1
+  expl_until: 0
   replay: {capacity: 2e6, ongoing: False, minlen: 50, maxlen: 50, prioritize_ends: True}
-  dataset: {batch: 50, length: 50}
+  dataset: {batch: 16, length: 50}
   log_keys_video: ['image']
   log_keys_sum: '^$'
   log_keys_mean: '^$'
@@ -25,41 +31,35 @@ defaults:
   jit: True
 
   # Agent
-  log_every: 1e4
-  train_every: 5
-  train_steps: 1
-  pretrain: 0
   clip_rewards: identity
-  expl_noise: 0.0
   expl_behavior: greedy
-  expl_until: 0
+  expl_noise: 0.0
   eval_noise: 0.0
   eval_state_mean: False
-  discrete: False
 
   # World Model
   grad_heads: [decoder, reward, discount]
   pred_discount: True
-  rssm: {ensemble: 1, hidden: 400, deter: 400, stoch: 32, discrete: 32, act: elu, norm: none, std_act: sigmoid2, min_std: 0.1}
+  rssm: {ensemble: 1, hidden: 1024, deter: 1024, stoch: 32, discrete: 32, act: elu, norm: none, std_act: sigmoid2, min_std: 0.1}
   encoder: {mlp_keys: '$^', cnn_keys: '^image$', act: elu, norm: none, cnn_depth: 48, cnn_kernels: [4, 4, 4, 4], mlp_layers: [400, 400, 400, 400]}
   decoder: {mlp_keys: '$^', cnn_keys: '^image$', act: elu, norm: none, cnn_depth: 48, cnn_kernels: [5, 5, 6, 6], mlp_layers: [400, 400, 400, 400]}
   reward_head: {layers: 4, units: 400, act: elu, norm: none, dist: mse}
   discount_head: {layers: 4, units: 400, act: elu, norm: none, dist: binary}
   loss_scales: {kl: 1.0, reward: 1.0, discount: 1.0, proprio: 1.0}
   kl: {free: 0.0, forward: False, balance: 0.8, free_avg: True}
-  model_opt: {opt: adam, lr: 3e-4, eps: 1e-5, clip: 100, wd: 1e-6}
+  model_opt: {opt: adam, lr: 1e-4, eps: 1e-5, clip: 100, wd: 1e-6}
 
   # Actor Critic
   actor: {layers: 4, units: 400, act: elu, norm: none, dist: trunc_normal, min_std: 0.1}
   critic: {layers: 4, units: 400, act: elu, norm: none, dist: mse}
-  actor_opt: {opt: adam, lr: 1e-4, eps: 1e-5, clip: 100, wd: 1e-6}
-  critic_opt: {opt: adam, lr: 1e-4, eps: 1e-5, clip: 100, wd: 1e-6}
+  actor_opt: {opt: adam, lr: 8e-5, eps: 1e-5, clip: 100, wd: 1e-6}
+  critic_opt: {opt: adam, lr: 2e-4, eps: 1e-5, clip: 100, wd: 1e-6}
   discount: 0.99
   discount_lambda: 0.95
   imag_horizon: 15
-  actor_grad: both
-  actor_grad_mix: '0.1'
-  actor_ent: '1e-4'
+  actor_grad: dynamics
+  actor_grad_mix: 0.1
+  actor_ent: 3e-3
   slow_target: True
   slow_target_update: 100
   slow_target_fraction: 1
@@ -67,8 +67,8 @@ defaults:
   reward_norm: {momentum: 1.0, scale: 1.0, eps: 1e-8}
 
   # Exploration
-  expl_intr_scale: 0.1
-  expl_extr_scale: 0.3
+  expl_intr_scale: 1.0
+  expl_extr_scale: 0.0
   expl_opt: {opt: adam, lr: 3e-4, eps: 1e-5, clip: 100, wd: 1e-6}
   expl_head: {layers: 4, units: 400, act: elu, norm: none, dist: mse}
   expl_reward_norm: {momentum: 1.0, scale: 1.0, eps: 1e-8}
@@ -91,7 +91,7 @@ atari:
   prefill: 50000
   train_every: 16
   clip_rewards: tanh
-  rssm: {hidden: 600, deter: 600, stoch: 32, discrete: 32}
+  rssm: {hidden: 600, deter: 600}
   actor.dist: onehot
   model_opt.lr: 2e-4
   actor_opt.lr: 4e-5
@@ -102,7 +102,6 @@ atari:
   actor_grad_mix: 0
   loss_scales.kl: 0.1
   loss_scales.discount: 5.0
-  .*\.wd$: 1e-6
 
 crafter:
 
@@ -114,7 +113,7 @@ crafter:
   eval_every: 1e5
   prefill: 10000
   train_every: 5
-  rssm: {hidden: 1024, deter: 1024, stoch: 32, discrete: 32}
+  rssm: {hidden: 1024, deter: 1024}
   dataset.batch: 16
   actor.dist: onehot
   model_opt.lr: 1e-4
@@ -123,7 +122,6 @@ crafter:
   actor_ent: 2e-3
   discount: 0.999
   actor_grad: reinforce
-  .*\.wd$: 1e-6
   .*\.norm: layer
 
 dmc:
@@ -146,15 +144,6 @@ dmc:
   actor_grad: dynamics
   kl.free: 1.0
   replay.prioritize_ends: False
-
-plan2explore:
-
-  expl_behavior: Plan2Explore
-  pred_discount: False
-  grad_heads: [decoder]
-  expl_intr_scale: 1.0
-  expl_extr_scale: 0.0  # 1.0 is a good scale
-  discount: 0.99
 
 debug:
 

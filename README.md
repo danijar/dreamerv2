@@ -137,9 +137,12 @@ import dreamerv2.api as dv2
 
 config = dv2.configs.crafter.update({
     'logdir': '~/logdir/minigrid',
+    'discrete': True,
     'log_every': 1e3,
-    'dataset.batch': 16,
-    'actor_ent': 1e-3,
+    'train_every': 10,
+    'actor.dist': 'onehot',
+    'actor_grad': 'reinforce',
+    'actor_ent': 3e-3,
     'loss_scales.kl': 1.0,
     'discount': 0.99,
 }).parse_flags()

@@ -67,9 +67,6 @@ class Agent(common.Module):
     metrics.update(self._task_behavior.train(
         self.wm, start, data['is_terminal'], reward))
     if self.config.expl_behavior != 'greedy':
-      if self.config.pred_discount:
-        data = tf.nest.map_structure(lambda x: x[:, :-1], data)
-        outputs = tf.nest.map_structure(lambda x: x[:, :-1], outputs)
       mets = self._expl_behavior.train(start, outputs, data)[-1]
       metrics.update({'expl_' + key: value for key, value in mets.items()})
     return state, metrics
@@ -176,7 +173,9 @@ class WorldModel(common.Module):
     for key, value in obs.items():
       if key.startswith('log_'):
         continue
-      if value.dtype == np.uint8:
+      if value.dtype == tf.int32:
+        value = value.astype(dtype)
+      if value.dtype == tf.uint8:
         value = value.astype(dtype) / 255.0 - 0.5
       obs[key] = value
     obs['reward'] = {
