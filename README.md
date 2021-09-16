@@ -133,25 +133,24 @@ Example script:
 ```python
 import gym
 import gym_minigrid
-import dreamerv2
+import dreamerv2.api as dv2
 
-config = dreamerv2.Config(dreamerv2.configs['defaults'])
-config = config.update({
-    **dreamerv2.configs['crafter'],
+config = dv2.configs.crafter.update({
     'logdir': '~/logdir/minigrid',
+    'log_every': 1e3,
     'dataset.batch': 16,
-    'dataset.length': 32,
-})
-config = dreamerv2.Flags(config).parse()
+    'actor_ent': 1e-3,
+    'loss_scales.kl': 1.0,
+    'discount': 0.99,
+}).parse_flags()
 
-def make_env(mode='train'):
-  env = gym.make('MiniGrid-DoorKey-6x6-v0')
-  env = gym_minigrid.wrappers.RGBImgPartialObsWrapper(env)
-  env = dreamerv2.DictSpaces(env)
-  env = dreamerv2.ResizeImage(env, (64, 64))
-  return env
+env = gym.make('MiniGrid-DoorKey-6x6-v0')
+env = gym_minigrid.wrappers.RGBImgPartialObsWrapper(env)
+env = dv2.GymWrapper(env)
+env = dv2.ResizeImage(env, (64, 64))
+env = dv2.OneHotAction(env)
 
-dreamerv2.run(make_env, config)
+dv2.train(env, config)
 ```
 
 ## Tips

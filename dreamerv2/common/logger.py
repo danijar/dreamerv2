@@ -86,23 +86,18 @@ class JSONLOutput:
 
   def __init__(self, logdir):
     self._logdir = pathlib.Path(logdir).expanduser()
-    self._logdir.mkdir(exist_ok=True, parents=True)
-    # We keep the file handle open because some cloud storage systems cannot
-    # handle quickly re-opening the file many times.
-    self._file_handle = (self._logdir / 'metrics.jsonl').open('a')
 
   def __call__(self, summaries):
     scalars = {k: float(v) for _, k, v in summaries if len(v.shape) == 0}
     step = max(s for s, _, _, in summaries)
-    self._file_handle.write(json.dumps({'step': step, **scalars}) + '\n')
-    self._file_handle.flush()
+    with (self._logdir / 'metrics.jsonl').open('a') as f:
+      f.write(json.dumps({'step': step, **scalars}) + '\n')
 
 
 class TensorBoardOutput:
 
   def __init__(self, logdir, fps=20):
     self._logdir = pathlib.Path(logdir).expanduser()
-    self._logdir.mkdir(exist_ok=True, parents=True)
     self._writer = None
     self._fps = fps
 
@@ -121,6 +116,12 @@ class TensorBoardOutput:
         self._video_summary(name, value, step)
     self._writer.flush()
 
+  def _ensure_writer(self):
+    if not self._writer:
+      import tensorflow as tf
+      self._writer = tf.summary.create_file_writer(
+          str(self._logdir), max_queue=1000)
+
   def _video_summary(self, name, video, step):
     import tensorflow as tf
     import tensorflow.compat.v1 as tf1
@@ -137,12 +138,6 @@ class TensorBoardOutput:
     except (IOError, OSError) as e:
       print('GIF summaries require ffmpeg in $PATH.', e)
       tf.summary.image(name, video, step)
-
-  def _ensure_writer(self):
-    if not self._writer:
-      import tensorflow as tf
-      self._writer = tf.summary.create_file_writer(
-          str(self._logdir), max_queue=1000)
 
 
 def encode_gif(frames, fps):

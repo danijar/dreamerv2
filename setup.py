@@ -4,7 +4,7 @@ import pathlib
 
 setuptools.setup(
     name='dreamerv2',
-    version='1.0.9',
+    version='2.0.6',
     description='Mastering Atari with Discrete World Models',
     url='http://github.com/danijar/dreamerv2',
     long_description=pathlib.Path('README.md').read_text(),

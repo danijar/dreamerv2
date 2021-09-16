@@ -45,6 +45,10 @@ class Config(dict):
     else:
       raise NotImplementedError(filename.suffix)
 
+  def parse_flags(self, argv=None, known_only=False, help_exists=None):
+    from . import flags
+    return flags.Flags(self).parse(argv, known_only, help_exists)
+
   def __contains__(self, name):
     try:
       self[name]

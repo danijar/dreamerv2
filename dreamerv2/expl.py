@@ -7,12 +7,13 @@ import common
 
 class Random(common.Module):
 
-  def __init__(self, action_space):
-    self._action_space = action_space
+  def __init__(self, config, world_model, num_actions, step, reward):
+    self.config = config
+    self.num_actions = num_actions
 
   def actor(self, feat):
-    shape = feat.shape[:-1] + [self._action_space.shape[-1]]
-    if hasattr(self._action_space, 'n'):
+    shape = feat.shape[:-1] + [self.num_actions]
+    if self.config.actor.dist == 'onehot':
       return common.OneHotDist(tf.zeros(shape))
     else:
       dist = tfd.Uniform(-tf.ones(shape), tf.ones(shape))
@@ -24,7 +25,7 @@ class Random(common.Module):
 
 class Plan2Explore(common.Module):
 
-  def __init__(self, config, world_model, num_actions, step, reward=None):
+  def __init__(self, config, world_model, num_actions, step, reward):
     self.config = config
     self.reward = reward
     self.wm = world_model
@@ -34,7 +35,7 @@ class Plan2Explore(common.Module):
     if config.rssm.discrete:
       stoch_size *= config.rssm.discrete
     size = {
-        'embed': 32 * config.encoder.depth,
+        'embed': 32 * config.encoder.cnn_depth,
         'stoch': stoch_size,
         'deter': config.rssm.deter,
         'feat': config.rssm.stoch + config.rssm.deter,
@@ -43,6 +44,8 @@ class Plan2Explore(common.Module):
         common.MLP(size, **config.expl_head)
         for _ in range(config.disag_models)]
     self.opt = common.Optimizer('expl', **config.expl_opt)
+    self.extr_rewnorm = common.StreamNorm(**self.config.expl_reward_norm)
+    self.intr_rewnorm = common.StreamNorm(**self.config.expl_reward_norm)
 
   def train(self, start, context, data):
     metrics = {}
@@ -64,18 +67,19 @@ class Plan2Explore(common.Module):
     metrics.update(self.ac.train(self.wm, start, self._intr_reward))
     return None, metrics
 
-  def _intr_reward(self, feat, state, action):
-    inputs = feat
+  def _intr_reward(self, seq):
+    inputs = seq['feat']
     if self.config.disag_action_cond:
-      action = tf.cast(action, inputs.dtype)
+      action = tf.cast(seq['action'], inputs.dtype)
       inputs = tf.concat([inputs, action], -1)
-    preds = [head(inputs).mean() for head in self._networks]
+    preds = [head(inputs).mode() for head in self._networks]
     disag = tf.tensor(preds).std(0).mean(-1)
     if self.config.disag_log:
       disag = tf.math.log(disag)
-    reward = self.config.expl_intr_scale * disag
+    reward = self.config.expl_intr_scale * self.intr_rewnorm(disag)[0]
     if self.config.expl_extr_scale:
-      reward += self.config.expl_extr_scale * self.reward(feat, state, action)
+      reward += self.config.expl_extr_scale * self.extr_rewnorm(
+          self.reward(seq))[0]
     return reward
 
   def _train_ensemble(self, inputs, targets):
@@ -93,7 +97,7 @@ class Plan2Explore(common.Module):
 
 class ModelLoss(common.Module):
 
-  def __init__(self, config, world_model, num_actions, step, reward=None):
+  def __init__(self, config, world_model, num_actions, step, reward):
     self.config = config
     self.reward = reward
     self.wm = world_model
@@ -111,8 +115,8 @@ class ModelLoss(common.Module):
     metrics.update(self.ac.train(self.wm, start, self._intr_reward))
     return None, metrics
 
-  def _intr_reward(self, feat, state, action):
-    reward = self.config.expl_intr_scale * self.head(feat).mode()
+  def _intr_reward(self, seq):
+    reward = self.config.expl_intr_scale * self.head(seq['feat']).mode()
     if self.config.expl_extr_scale:
-      reward += self.config.expl_extr_scale * self.reward(feat, state, action)
+      reward += self.config.expl_extr_scale * self.reward(seq)
     return reward

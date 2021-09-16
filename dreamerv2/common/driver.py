@@ -9,7 +9,7 @@ class Driver:
     self._on_steps = []
     self._on_resets = []
     self._on_episodes = []
-    self._actspaces = [env.action_space.spaces for env in envs]
+    self._act_spaces = [env.act_space for env in envs]
     self.reset()
 
   def on_step(self, callback):
@@ -23,42 +23,40 @@ class Driver:
 
   def reset(self):
     self._obs = [None] * len(self._envs)
-    self._dones = [True] * len(self._envs)
     self._eps = [None] * len(self._envs)
     self._state = None
 
   def __call__(self, policy, steps=0, episodes=0):
     step, episode = 0, 0
     while step < steps or episode < episodes:
-      for i, done in enumerate(self._dones):
-        if done:
-          self._obs[i] = ob = self._envs[i].reset()
-          act = {k: np.zeros(v.shape) for k, v in self._actspaces[i].items()}
-          tran = {**ob, **act, 'reward': 0.0, 'discount': 1.0, 'done': False}
-          [callback(tran, **self._kwargs) for callback in self._on_resets]
-          self._eps[i] = [tran]
+      obs = {
+          i: self._envs[i].reset()
+          for i, ob in enumerate(self._obs) if ob is None or ob['is_last']}
+      for i, ob in obs.items():
+        self._obs[i] = ob() if callable(ob) else ob
+        act = {k: np.zeros(v.shape) for k, v in self._act_spaces[i].items()}
+        tran = {k: self._convert(v) for k, v in {**ob, **act}.items()}
+        [fn(tran, worker=i, **self._kwargs) for fn in self._on_resets]
+        self._eps[i] = [tran]
       obs = {k: np.stack([o[k] for o in self._obs]) for k in self._obs[0]}
       actions, self._state = policy(obs, self._state, **self._kwargs)
       actions = [
           {k: np.array(actions[k][i]) for k in actions}
           for i in range(len(self._envs))]
       assert len(actions) == len(self._envs)
-      results = [e.step(a) for e, a in zip(self._envs, actions)]
-      for i, (act, (ob, rew, done, info)) in enumerate(zip(actions, results)):
-        obs = {k: self._convert(v) for k, v in obs.items()}
-        disc = info.get('discount', np.array(1 - float(done)))
-        tran = {**ob, **act, 'reward': rew, 'discount': disc, 'done': done}
-        [callback(tran, **self._kwargs) for callback in self._on_steps]
+      obs = [e.step(a) for e, a in zip(self._envs, actions)]
+      obs = [ob() if callable(ob) else ob for ob in obs]
+      for i, (act, ob) in enumerate(zip(actions, obs)):
+        tran = {k: self._convert(v) for k, v in {**ob, **act}.items()}
+        [fn(tran, worker=i, **self._kwargs) for fn in self._on_steps]
         self._eps[i].append(tran)
-        if done:
+        step += 1
+        if ob['is_last']:
           ep = self._eps[i]
           ep = {k: self._convert([t[k] for t in ep]) for k in ep[0]}
-          [callback(ep, **self._kwargs) for callback in self._on_episodes]
-      obs, _, dones = zip(*[p[:3] for p in results])
-      self._obs = list(obs)
-      self._dones = list(dones)
-      episode += sum(dones)
-      step += len(dones)
+          [fn(ep, **self._kwargs) for fn in self._on_episodes]
+          episode += 1
+      self._obs = obs
 
   def _convert(self, value):
     value = np.array(value)

@@ -43,7 +43,7 @@ PALETTES = dict(
 
 LEGEND = dict(
     fontsize='medium', numpoints=1, labelspacing=0, columnspacing=1.2,
-    handlelength=1.5, handletextpad=0.5, ncol=4, loc='lower center')
+    handlelength=1.5, handletextpad=0.5, loc='lower center')
 
 DEFAULT_BASELINES = ['d4pg', 'rainbow_sticky', 'human_gamer', 'impala']
 
@@ -108,8 +108,13 @@ def load_run(filename, indir, args):
   if args.xmult != 1:
     xs = xs.astype(np.float32) * args.xmult
   ys = df[args.yaxis].to_numpy()
-  if args.bins:
-    borders = np.arange(0, xs.max() + 1e-8, args.bins)
+  bins = {
+      'atari': 1e6,
+      'dmc': 1e4,
+      'crafter': 1e4,
+  }.get(task.split('_')[0], 1e5) if args.bins == -1 else args.bins
+  if bins:
+    borders = np.arange(0, xs.max() + 1e-8, bins)
     xs, ys = bin_scores(xs, ys, borders)
   if not len(xs):
     print('Skipping empty run', task, method, seed)
@@ -179,12 +184,10 @@ def figure(runs, methods, args):
     if name == 'median':
       plot_combined(
           'combined_median', ax, runs, methods, args,
-          lo='random', hi='human_gamer',
           agg=lambda x: np.nanmedian(x, -1))
     elif name == 'mean':
       plot_combined(
           'combined_mean', ax, runs, methods, args,
-          lo='random', hi='human_gamer',
           agg=lambda x: np.nanmean(x, -1))
     elif name == 'gamer_median':
       plot_combined(
@@ -201,7 +204,7 @@ def figure(runs, methods, args):
           'combined_record_mean', ax, runs, methods, args,
           lo='random', hi='record',
           agg=lambda x: np.nanmean(x, -1))
-    elif name == 'clipped_record_mean':
+    elif name == 'clip_record_mean':
       plot_combined(
           'combined_clipped_record_mean', ax, runs, methods, args,
           lo='random', hi='record', clip=True,
@@ -209,7 +212,7 @@ def figure(runs, methods, args):
     elif name == 'seeds':
       plot_combined(
           'combined_seeds', ax, runs, methods, args,
-          agg=lambda x: np.isfinite(x).sum(-1), fill='nan')
+          agg=lambda x: np.isfinite(x).sum(-1))
     elif name == 'human_above':
       plot_combined(
           'combined_above_human_gamer', ax, runs, methods, args,
@@ -231,7 +234,7 @@ def figure(runs, methods, args):
       ax.set_ylabel(args.ylabel)
   for ax in axes.flatten()[len(tasks) + len(args.add):]:
     ax.axis('off')
-  legend(fig, args.labels, **LEGEND)
+  legend(fig, args.labels, ncol=args.legendcols, **LEGEND)
   return fig
 
 
@@ -277,8 +280,7 @@ def plot(task, ax, runs, methods, args):
 
 
 def plot_combined(
-    name, ax, runs, methods, args, agg, lo=None, hi=None, clip=False,
-    fill='last'):
+    name, ax, runs, methods, args, agg, lo=None, hi=None, clip=False):
   tasks = sorted(set(run.task for run in runs if run.xs is not None))
   seeds = list(set(run.seed for run in runs))
   runs = [r for r in runs if r.task in tasks]  # Discard unused baselines.
@@ -289,7 +291,7 @@ def plot_combined(
   for index, run in enumerate(runs):
     if run.xs is None:
       continue
-    xs, ys = bin_scores(run.xs, run.ys, borders, fill=fill)
+    xs, ys = bin_scores(run.xs, run.ys, borders, fill='last')
     runs[index] = run._replace(xs=xs, ys=ys)
   # Per-task normalization by low and high baseline.
   if lo or hi:
@@ -336,7 +338,7 @@ def curve_lines(index, task, method, ax, runs, args):
   for run in runs:
     color = args.colors[method]
     ax.plot(run.xs, run.ys, label=method, color=color, zorder=zorder)
-  xs, ys = stack_scores(*zip(*[(r.xs, r.ys) for r in runs]), fill='nan')
+  xs, ys = stack_scores(*zip(*[(r.xs, r.ys) for r in runs]))
   return xs, ys
 
 
@@ -357,6 +359,8 @@ def curve_area(index, task, method, ax, runs, args):
       raise NotImplementedError(args.agg)
   color = args.colors[method]
   kw = dict(color=color, zorder=1000 - 10 * index, alpha=0.1, linewidths=0)
+  mask = ~np.isnan(mi)
+  xs, lo, mi, hi = xs[mask], lo[mask], mi[mask], hi[mask]
   ax.fill_between(xs, lo, hi, **kw)
   ax.plot(xs, mi, label=method, color=color, zorder=10000 - 10 * index - 1)
   return xs, mi
@@ -481,6 +485,22 @@ def main(args):
   if not runs:
     print('Noting to plot.')
     return
+  # Adjust options based on loaded runs.
+  tasks = set(r.task for r in runs)
+  if 'auto' in args.add:
+    index = args.add.index('auto')
+    del args.add[index]
+    atari = any(run.task.startswith('atari_') for run in runs)
+    if len(tasks) < 2:
+      pass
+    elif atari:
+      args.add[index:index] = [
+          'gamer_median', 'gamer_mean', 'record_mean', 'clip_record_mean',
+      ]
+    else:
+      args.add[index:index] = ['mean', 'median']
+  args.cols = min(args.cols, len(tasks) + len(args.add))
+  args.legendcols = min(args.legendcols, args.cols)
   print('Plotting...')
   fig = figure(runs + baselines, methods, args)
   save(fig, args)
@@ -499,7 +519,7 @@ def parse_args():
   parser.add_argument('--methods', nargs='+', default=[r'.*'])
   parser.add_argument('--baselines', nargs='+', default=DEFAULT_BASELINES)
   parser.add_argument('--prefix', type=boolean, default=False)
-  parser.add_argument('--bins', type=float, default=3e5)
+  parser.add_argument('--bins', type=float, default=-1)
   parser.add_argument('--agg', type=str, default='std1')
   parser.add_argument('--size', nargs=2, type=float, default=[2.5, 2.3])
   parser.add_argument('--dpi', type=int, default=80)
@@ -514,11 +534,10 @@ def parse_args():
   parser.add_argument('--xmult', type=float, default=1)
   parser.add_argument('--labels', nargs='+', default=None)
   parser.add_argument('--palette', nargs='+', default=['contrast'])
+  parser.add_argument('--legendcols', type=int, default=4)
   parser.add_argument('--colors', nargs='+', default={})
   parser.add_argument('--maxval', type=float, default=0)
-  parser.add_argument('--add', nargs='+', type=str, default=[
-      'gamer_median', 'gamer_mean', 'record_mean',
-      'clipped_record_mean', 'seeds'])
+  parser.add_argument('--add', nargs='+', type=str, default=['auto', 'seeds'])
   args = parser.parse_args()
   if args.subdir:
     args.outdir /= args.indir[0].stem

@@ -4,17 +4,23 @@ defaults:
   logdir: /dev/null
   seed: 0
   task: dmc_walker_walk
-  num_envs: 1
+  envs: 1
+  envs_parallel: none
+  render_size: [64, 64]
+  dmc_camera: -1
+  atari_grayscale: True
+  time_limit: 0
+  action_repeat: 1
   steps: 1e8
   eval_every: 1e5
   eval_eps: 1
-  action_repeat: 1
-  time_limit: 0
   prefill: 10000
-  image_size: [64, 64]
-  grayscale: False
-  replay_size: 2e6
-  dataset: {batch: 50, length: 50, oversample_ends: True}
+  replay: {capacity: 2e6, ongoing: False, minlen: 50, maxlen: 50, prioritize_ends: True}
+  dataset: {batch: 50, length: 50}
+  log_keys_video: ['image']
+  log_keys_sum: '^$'
+  log_keys_mean: '^$'
+  log_keys_max: '^$'
   precision: 16
   jit: True
 
@@ -29,41 +35,45 @@ defaults:
   expl_until: 0
   eval_noise: 0.0
   eval_state_mean: False
+  discrete: False
 
   # World Model
+  grad_heads: [decoder, reward, discount]
   pred_discount: True
-  grad_heads: [image, reward, discount]
-  rssm: {hidden: 400, deter: 400, stoch: 32, discrete: 32, act: elu, std_act: sigmoid2, min_std: 0.1}
-  encoder: {depth: 48, act: elu, kernels: [4, 4, 4, 4], keys: [image]}
-  decoder: {depth: 48, act: elu, kernels: [5, 5, 6, 6]}
-  reward_head: {layers: 4, units: 400, act: elu, dist: mse}
-  discount_head: {layers: 4, units: 400, act: elu, dist: binary}
-  loss_scales: {kl: 1.0, reward: 1.0, discount: 1.0}
+  rssm: {ensemble: 1, hidden: 400, deter: 400, stoch: 32, discrete: 32, act: elu, norm: none, std_act: sigmoid2, min_std: 0.1}
+  encoder: {mlp_keys: '$^', cnn_keys: '^image$', act: elu, norm: none, cnn_depth: 48, cnn_kernels: [4, 4, 4, 4], mlp_layers: [400, 400, 400, 400]}
+  decoder: {mlp_keys: '$^', cnn_keys: '^image$', act: elu, norm: none, cnn_depth: 48, cnn_kernels: [5, 5, 6, 6], mlp_layers: [400, 400, 400, 400]}
+  reward_head: {layers: 4, units: 400, act: elu, norm: none, dist: mse}
+  discount_head: {layers: 4, units: 400, act: elu, norm: none, dist: binary}
+  loss_scales: {kl: 1.0, reward: 1.0, discount: 1.0, proprio: 1.0}
   kl: {free: 0.0, forward: False, balance: 0.8, free_avg: True}
   model_opt: {opt: adam, lr: 3e-4, eps: 1e-5, clip: 100, wd: 1e-6}
 
   # Actor Critic
-  actor: {layers: 4, units: 400, act: elu, dist: trunc_normal, min_std: 0.1}
-  critic: {layers: 4, units: 400, act: elu, dist: mse}
+  actor: {layers: 4, units: 400, act: elu, norm: none, dist: trunc_normal, min_std: 0.1}
+  critic: {layers: 4, units: 400, act: elu, norm: none, dist: mse}
   actor_opt: {opt: adam, lr: 1e-4, eps: 1e-5, clip: 100, wd: 1e-6}
   critic_opt: {opt: adam, lr: 1e-4, eps: 1e-5, clip: 100, wd: 1e-6}
   discount: 0.99
   discount_lambda: 0.95
   imag_horizon: 15
-  actor_grad: reinforce
-  actor_grad_mix: 0.0
+  actor_grad: both
+  actor_grad_mix: '0.1'
   actor_ent: '1e-4'
   slow_target: True
   slow_target_update: 100
   slow_target_fraction: 1
+  slow_baseline: True
+  reward_norm: {momentum: 1.0, scale: 1.0, eps: 1e-8}
 
   # Exploration
-  expl_extr_scale: 0.0
-  expl_intr_scale: 1.0
+  expl_intr_scale: 0.1
+  expl_extr_scale: 0.3
   expl_opt: {opt: adam, lr: 3e-4, eps: 1e-5, clip: 100, wd: 1e-6}
-  expl_head: {layers: 4, units: 400, act: elu, dist: mse}
+  expl_head: {layers: 4, units: 400, act: elu, norm: none, dist: mse}
+  expl_reward_norm: {momentum: 1.0, scale: 1.0, eps: 1e-8}
   disag_target: stoch
-  disag_log: True
+  disag_log: False
   disag_models: 10
   disag_offset: 1
   disag_action_cond: True
@@ -72,13 +82,13 @@ defaults:
 atari:
 
   task: atari_pong
-  time_limit: 108000  # 30 minutes of game play.
+  time_limit: 27000
+  discrete: True
   action_repeat: 4
-  steps: 2e8
-  eval_every: 1e5
-  log_every: 1e5
-  prefill: 200000
-  grayscale: True
+  steps: 5e7
+  eval_every: 2.5e5
+  log_every: 1e4
+  prefill: 50000
   train_every: 16
   clip_rewards: tanh
   rssm: {hidden: 600, deter: 600, stoch: 32, discrete: 32}
@@ -89,6 +99,7 @@ atari:
   actor_ent: 1e-3
   discount: 0.999
   actor_grad: reinforce
+  actor_grad_mix: 0
   loss_scales.kl: 0.1
   loss_scales.discount: 5.0
   .*\.wd$: 1e-6
@@ -96,36 +107,36 @@ atari:
 crafter:
 
   task: crafter_reward
-  steps: 5e6
+  discrete: True
+  log_keys_max: '^log_achievement_.*'
+  log_keys_sum: '^log_reward$'
+  log_every: 1e4
   eval_every: 1e5
-  log_every: 1e5
-  prefill: 50000
-  train_every: 16
+  prefill: 10000
+  train_every: 5
+  rssm: {hidden: 1024, deter: 1024, stoch: 32, discrete: 32}
   dataset.batch: 16
-  rssm: {hidden: 2048, deter: 2048, stoch: 32, discrete: 32}
   actor.dist: onehot
   model_opt.lr: 1e-4
-  actor_opt.lr: 1e-4
-  critic_opt.lr: 1e-4
-  actor_ent: 3e-3
+  actor_opt.lr: 8e-5
+  critic_opt.lr: 2e-4
+  actor_ent: 2e-3
   discount: 0.999
   actor_grad: reinforce
-  loss_scales.reward: 10
-  loss_scales.discount: 5.0
   .*\.wd$: 1e-6
+  .*\.norm: layer
 
 dmc:
 
   task: dmc_walker_walk
-  time_limit: 1000
   action_repeat: 2
   eval_every: 1e4
   log_every: 1e4
-  prefill: 5000
+  prefill: 1000
   train_every: 5
   pretrain: 100
   pred_discount: False
-  grad_heads: [image, reward]
+  grad_heads: [decoder, reward]
   rssm: {hidden: 200, deter: 200}
   model_opt.lr: 3e-4
   actor_opt.lr: 8e-5
@@ -134,7 +145,16 @@ dmc:
   discount: 0.99
   actor_grad: dynamics
   kl.free: 1.0
-  dataset.oversample_ends: False
+  replay.prioritize_ends: False
+
+plan2explore:
+
+  expl_behavior: Plan2Explore
+  pred_discount: False
+  grad_heads: [decoder]
+  expl_intr_scale: 1.0
+  expl_extr_scale: 0.0  # 1.0 is a good scale
+  discount: 0.99
 
 debug:
 
@@ -145,5 +165,5 @@ debug:
   prefill: 100
   pretrain: 1
   train_steps: 1
-  dataset.batch: 10
-  dataset.length: 10
+  replay: {minlen: 10, maxlen: 30}
+  dataset: {batch: 10, length: 10}

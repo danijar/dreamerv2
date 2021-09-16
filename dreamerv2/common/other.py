@@ -1,29 +1,28 @@
+import collections
+import contextlib
 import re
+import time
 
+import numpy as np
 import tensorflow as tf
 from tensorflow_probability import distributions as tfd
 
 from . import dists
-
-
-class AttrDict(dict):
-
-  __getattr__ = dict.__getitem__
-  __setattr__ = dict.__setitem__
+from . import tfutils
 
 
 class RandomAgent:
 
-  def __init__(self, action_space, logprob=False):
+  def __init__(self, num_actions, discrete, logprob=False):
     self._logprob = logprob
-    if hasattr(action_space, 'n'):
-      self._dist = dists.OneHotDist(tf.zeros(action_space.n))
+    if discrete:
+      self._dist = dists.OneHotDist(tf.zeros(num_actions))
     else:
-      dist = tfd.Uniform(action_space.low, action_space.high)
+      dist = tfd.Uniform(-np.ones(num_actions), np.ones(num_actions))
       self._dist = tfd.Independent(dist, 1)
 
   def __call__(self, obs, state=None, mode=None):
-    action = self._dist.sample(len(obs['reset']))
+    action = self._dist.sample(len(obs['is_first']))
     output = {'action': action}
     if self._logprob:
       output['logprob'] = self._dist.log_prob(action)
@@ -99,18 +98,104 @@ def lambda_return(
   return returns
 
 
-def action_noise(action, amount, action_space):
+def action_noise(action, amount, discrete):
   if amount == 0:
     return action
   amount = tf.cast(amount, action.dtype)
-  if hasattr(action_space, 'n'):
+  if discrete:
     probs = amount / action.shape[-1] + (1 - amount) * action
     return dists.OneHotDist(probs=probs).sample()
   else:
     return tf.clip_by_value(tfd.Normal(action, amount).sample(), -1, 1)
 
 
-def pad_dims(tensor, total_dims):
-  while len(tensor.shape) < total_dims:
-    tensor = tensor[..., None]
-  return tensor
+class StreamNorm(tfutils.Module):
+
+  def __init__(self, shape=(), momentum=0.99, scale=1.0, eps=1e-8):
+    # Momentum of 0 normalizes only based on the current batch.
+    # Momentum of 1 disables normalization.
+    self._shape = tuple(shape)
+    self._momentum = momentum
+    self._scale = scale
+    self._eps = eps
+    self.mag = tf.Variable(tf.ones(shape, tf.float64), False)
+
+  def __call__(self, inputs):
+    metrics = {}
+    self.update(inputs)
+    metrics['mean'] = inputs.mean()
+    metrics['std'] = inputs.std()
+    outputs = self.transform(inputs)
+    metrics['normed_mean'] = outputs.mean()
+    metrics['normed_std'] = outputs.std()
+    return outputs, metrics
+
+  def reset(self):
+    self.mag.assign(tf.ones_like(self.mag))
+
+  def update(self, inputs):
+    batch = inputs.reshape((-1,) + self._shape)
+    mag = tf.abs(batch).mean(0).astype(tf.float64)
+    self.mag.assign(self._momentum * self.mag + (1 - self._momentum) * mag)
+
+  def transform(self, inputs):
+    values = inputs.reshape((-1,) + self._shape)
+    values /= self.mag.astype(inputs.dtype)[None] + self._eps
+    values *= self._scale
+    return values.reshape(inputs.shape)
+
+
+class Timer:
+
+  def __init__(self):
+    self._indurs = collections.defaultdict(list)
+    self._outdurs = collections.defaultdict(list)
+    self._start_times = {}
+    self._end_times = {}
+
+  @contextlib.contextmanager
+  def section(self, name):
+    self.start(name)
+    yield
+    self.end(name)
+
+  def wrap(self, function, name):
+    def wrapped(*args, **kwargs):
+      with self.section(name):
+        return function(*args, **kwargs)
+    return wrapped
+
+  def start(self, name):
+    now = time.time()
+    self._start_times[name] = now
+    if name in self._end_times:
+      last = self._end_times[name]
+      self._outdurs[name].append(now - last)
+
+  def end(self, name):
+    now = time.time()
+    self._end_times[name] = now
+    self._indurs[name].append(now - self._start_times[name])
+
+  def result(self):
+    metrics = {}
+    for key in self._indurs:
+      indurs = self._indurs[key]
+      outdurs = self._outdurs[key]
+      metrics[f'timer_count_{key}'] = len(indurs)
+      metrics[f'timer_inside_{key}'] = np.sum(indurs)
+      metrics[f'timer_outside_{key}'] = np.sum(outdurs)
+      indurs.clear()
+      outdurs.clear()
+    return metrics
+
+
+class CarryOverState:
+
+  def __init__(self, fn):
+    self._fn = fn
+    self._state = None
+
+  def __call__(self, *args):
+    self._state, out = self._fn(*args, self._state)
+    return out

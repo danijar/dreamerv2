@@ -58,11 +58,15 @@ class OneHotDist(tfd.OneHotCategorical):
   def sample(self, sample_shape=(), seed=None):
     # Straight through biased gradient estimator.
     sample = tf.cast(super().sample(sample_shape, seed), self._sample_dtype)
-    probs = super().probs_parameter()
-    while len(probs.shape) < len(sample.shape):
-      probs = probs[None]
+    probs = self._pad(super().probs_parameter(), sample.shape)
     sample += tf.cast(probs - tf.stop_gradient(probs), self._sample_dtype)
     return sample
+
+  def _pad(self, tensor, shape):
+    tensor = super().probs_parameter()
+    while len(tensor.shape) < len(shape):
+      tensor = tensor[None]
+    return tensor
 
 
 class TruncNormalDist(tfd.TruncatedNormal):
