@@ -13,18 +13,19 @@ from . import tfutils
 
 class RandomAgent:
 
-  def __init__(self, num_actions, discrete, logprob=False):
-    self._logprob = logprob
-    if discrete:
-      self._dist = dists.OneHotDist(tf.zeros(num_actions))
+  def __init__(self, act_space, logprob=False):
+    self.act_space = act_space['action']
+    self.logprob = logprob
+    if hasattr(self.act_space, 'n'):
+      self._dist = dists.OneHotDist(tf.zeros(self.act_space.n))
     else:
-      dist = tfd.Uniform(-np.ones(num_actions), np.ones(num_actions))
+      dist = tfd.Uniform(self.act_space.low, self.act_space.high)
       self._dist = tfd.Independent(dist, 1)
 
   def __call__(self, obs, state=None, mode=None):
     action = self._dist.sample(len(obs['is_first']))
     output = {'action': action}
-    if self._logprob:
+    if self.logprob:
       output['logprob'] = self._dist.log_prob(action)
     return output, None
 
@@ -98,11 +99,11 @@ def lambda_return(
   return returns
 
 
-def action_noise(action, amount, discrete):
+def action_noise(action, amount, act_space):
   if amount == 0:
     return action
   amount = tf.cast(amount, action.dtype)
-  if discrete:
+  if hasattr(act_space, 'n'):
     probs = amount / action.shape[-1] + (1 - amount) * action
     return dists.OneHotDist(probs=probs).sample()
   else:

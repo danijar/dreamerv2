@@ -11,21 +11,17 @@ logging.getLogger().setLevel('ERROR')
 warnings.filterwarnings('ignore', '.*box bound precision lowered.*')
 
 sys.path.append(str(pathlib.Path(__file__).parent))
+sys.path.append(str(pathlib.Path(__file__).parent.parent))
 
 import numpy as np
 import ruamel.yaml as yaml
-import tensorflow as tf
 
 import agent
 import common
 
 from common import Config
 from common import GymWrapper
-from common import Flags
-from common import ResizeImage
-from common import NormalizeAction
-from common import OneHotAction
-from common import TimeLimit
+from common import RenderImage
 from common import TerminalOutput
 from common import JSONLOutput
 from common import TensorBoardOutput
@@ -33,7 +29,6 @@ from common import TensorBoardOutput
 configs = yaml.safe_load(
     (pathlib.Path(__file__).parent / 'configs.yaml').read_text())
 defaults = common.Config(configs.pop('defaults'))
-configs = common.Config({k: defaults.update(v) for k, v in configs.items()})
 
 
 def train(env, config, outputs=None):
@@ -43,16 +38,6 @@ def train(env, config, outputs=None):
   config.save(logdir / 'config.yaml')
   print(config, '\n')
   print('Logdir', logdir)
-
-  tf.config.experimental_run_functions_eagerly(not config.jit)
-  message = 'No GPU found. To actually train on CPU remove this assert.'
-  assert tf.config.experimental.list_physical_devices('GPU'), message
-  for gpu in tf.config.experimental.list_physical_devices('GPU'):
-    tf.config.experimental.set_memory_growth(gpu, True)
-  assert config.precision in (16, 32), config.precision
-  if config.precision == 16:
-    from tensorflow.keras.mixed_precision import experimental as prec
-    prec.set_policy(prec.Policy('mixed_float16'))
 
   outputs = outputs or [
       common.TerminalOutput(),
@@ -88,9 +73,14 @@ def train(env, config, outputs=None):
     logger.add(replay.stats)
     logger.write()
 
-  print('Create envs.')
-  act_space = env.act_space['action']
-  num_actions = act_space.n if config.discrete else act_space.shape[-1]
+  env = common.GymWrapper(env)
+  env = common.ResizeImage(env)
+  if hasattr(env.act_space['action'], 'n'):
+    env = common.OneHotAction(env)
+  else:
+    env = common.NormalizeAction(env)
+  env = common.TimeLimit(env, config.time_limit)
+
   driver = common.Driver([env])
   driver.on_episode(per_episode)
   driver.on_step(lambda tran, worker: step.increment())
@@ -100,14 +90,13 @@ def train(env, config, outputs=None):
   prefill = max(0, config.prefill - replay.stats['total_steps'])
   if prefill:
     print(f'Prefill dataset ({prefill} steps).')
-    random_agent = common.RandomAgent(num_actions, config.discrete)
+    random_agent = common.RandomAgent(env.act_space)
     driver(random_agent, steps=prefill, episodes=1)
     driver.reset()
 
   print('Create agent.')
+  agnt = agent.Agent(config, env.obs_space, env.act_space, step)
   dataset = iter(replay.dataset(**config.dataset))
-  shapes = {k: v.shape[2:] for k, v in dataset.element_spec.items()}
-  agnt = agent.Agent(config, logger, step, shapes)
   train_agent = common.CarryOverState(agnt.train)
   train_agent(next(dataset))
   if (logdir / 'variables.pkl').exists():

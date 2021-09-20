@@ -22,7 +22,6 @@ sys.path.append(str(pathlib.Path(__file__).parent.parent))
 
 import numpy as np
 import ruamel.yaml as yaml
-import tensorflow as tf
 
 import agent
 import common
@@ -44,6 +43,7 @@ def main():
   print(config, '\n')
   print('Logdir', logdir)
 
+  import tensorflow as tf
   tf.config.experimental_run_functions_eagerly(not config.jit)
   message = 'No GPU found. To actually train on CPU remove this assert.'
   assert tf.config.experimental.list_physical_devices('GPU'), message
@@ -118,17 +118,17 @@ def main():
     logger.write()
 
   print('Create envs.')
-  eval_envs = min(config.envs, config.eval_eps)
+  num_eval_envs = min(config.envs, config.eval_eps)
   if config.envs_parallel == 'none':
     train_envs = [make_env('train') for _ in range(config.envs)]
-    eval_envs = [make_env('eval') for _ in range(eval_envs)]
+    eval_envs = [make_env('eval') for _ in range(num_eval_envs)]
   else:
     make_async_env = lambda mode: common.Async(
         functools.partial(make_env, mode), config.envs_parallel)
     train_envs = [make_async_env('train') for _ in range(config.envs)]
     eval_envs = [make_async_env('eval') for _ in range(eval_envs)]
-  act_space = train_envs[0].act_space['action']
-  num_actions = act_space.n if config.discrete else act_space.shape[-1]
+  act_space = train_envs[0].act_space
+  obs_space = train_envs[0].obs_space
   train_driver = common.Driver(train_envs)
   train_driver.on_episode(lambda ep: per_episode(ep, mode='train'))
   train_driver.on_step(lambda tran, worker: step.increment())
@@ -141,7 +141,7 @@ def main():
   prefill = max(0, config.prefill - train_replay.stats['total_steps'])
   if prefill:
     print(f'Prefill dataset ({prefill} steps).')
-    random_agent = common.RandomAgent(num_actions, config.discrete)
+    random_agent = common.RandomAgent(act_space)
     train_driver(random_agent, steps=prefill, episodes=1)
     eval_driver(random_agent, episodes=1)
     train_driver.reset()
@@ -151,8 +151,7 @@ def main():
   train_dataset = iter(train_replay.dataset(**config.dataset))
   report_dataset = iter(train_replay.dataset(**config.dataset))
   eval_dataset = iter(eval_replay.dataset(**config.dataset))
-  shapes = {k: v.shape[2:] for k, v in train_dataset.element_spec.items()}
-  agnt = agent.Agent(config, logger, step, shapes)
+  agnt = agent.Agent(config, obs_space, act_space, step)
   train_agent = common.CarryOverState(agnt.train)
   train_agent(next(train_dataset))
   if (logdir / 'variables.pkl').exists():

@@ -183,85 +183,85 @@ class EnsembleRSSM(common.Module):
 class Encoder(common.Module):
 
   def __init__(
-      self, cnn_keys=r'image', mlp_keys=r'^$', act='elu', norm='none',
+      self, shapes, cnn_keys=r'.*', mlp_keys=r'.*', act='elu', norm='none',
       cnn_depth=48, cnn_kernels=(4, 4, 4, 4), mlp_layers=[400, 400, 400, 400]):
-    self._cnn_keys = re.compile(cnn_keys)
-    self._mlp_keys = re.compile(mlp_keys)
+    self.shapes = shapes
+    self.cnn_keys = [
+        k for k, v in shapes.items() if re.match(cnn_keys, k) and len(v) == 3]
+    self.mlp_keys = [
+        k for k, v in shapes.items() if re.match(mlp_keys, k) and len(v) == 1]
+    print('Encoder CNN inputs:', list(self.cnn_keys))
+    print('Encoder MLP inputs:', list(self.mlp_keys))
     self._act = get_act(act)
     self._norm = norm
     self._cnn_depth = cnn_depth
     self._cnn_kernels = cnn_kernels
     self._mlp_layers = mlp_layers
-    self._once = True
 
   @tf.function
-  def __call__(self, obs):
-    outs = [self._cnn(obs), self._mlp(obs)]
-    outs = [out for out in outs if out is not None]
-    self._once = False
-    return tf.concat(outs, -1)
+  def __call__(self, data):
+    key, shape = list(self.shapes.items())[0]
+    batch_dims = data[key].shape[:-len(shape)]
+    data = {
+        k: tf.reshape(v, (-1,) + tuple(v.shape)[len(batch_dims):])
+        for k, v in data.items()}
+    outputs = []
+    if self.cnn_keys:
+      outputs.append(self._cnn({k: data[k] for k in self.cnn_keys}))
+    if self.mlp_keys:
+      outputs.append(self._mlp({k: data[k] for k in self.mlp_keys}))
+    output = tf.concat(outputs, -1)
+    return output.reshape(batch_dims + output.shape[1:])
 
-  def _cnn(self, obs):
-    inputs = {
-        key: tf.reshape(obs[key], (-1,) + tuple(obs[key].shape[-3:]))
-        for key in obs if self._cnn_keys.match(key)}
-    if not inputs:
-      return None
-    self._once and print('Encoder CNN inputs:', list(inputs.keys()))
-    x = tf.concat(list(inputs.values()), -1)
+  def _cnn(self, data):
+    x = tf.concat(list(data.values()), -1)
     x = x.astype(prec.global_policy().compute_dtype)
     for i, kernel in enumerate(self._cnn_kernels):
       depth = 2 ** i * self._cnn_depth
       x = self.get(f'conv{i}', tfkl.Conv2D, depth, kernel, 2)(x)
       x = self.get(f'convnorm{i}', NormLayer, self._norm)(x)
       x = self._act(x)
-    return x.reshape(list(obs['image'].shape[:-3]) + [-1])
+    return x.reshape(tuple(x.shape[:-3]) + (-1,))
 
-  def _mlp(self, obs):
-    batch_dims = list(obs['reward'].shape)
-    inputs = {
-        key: tf.reshape(obs[key], [np.prod(batch_dims), -1])
-        for key in obs if self._mlp_keys.match(key)}
-    if not inputs:
-      return None
-    self._once and print('Encoder MLP inputs:', list(inputs.keys()))
-    # print('\n'.join([str((k, v.shape, v.dtype)) for k, v in inputs.items()]))
-    x = tf.concat(list(inputs.values()), -1)
+  def _mlp(self, data):
+    x = tf.concat(list(data.values()), -1)
     x = x.astype(prec.global_policy().compute_dtype)
     for i, width in enumerate(self._mlp_layers):
       x = self.get(f'dense{i}', tfkl.Dense, width)(x)
       x = self.get(f'densenorm{i}', NormLayer, self._norm)(x)
       x = self._act(x)
-    return x.reshape(batch_dims + [-1])
+    return x
 
 
 class Decoder(common.Module):
 
   def __init__(
-      self, shapes, cnn_keys=r'image', mlp_keys=r'^$', act='elu', norm='none',
+      self, shapes, cnn_keys=r'.*', mlp_keys=r'.*', act='elu', norm='none',
       cnn_depth=48, cnn_kernels=(4, 4, 4, 4), mlp_layers=[400, 400, 400, 400]):
     self._shapes = shapes
-    self._cnn_keys = re.compile(cnn_keys)
-    self._mlp_keys = re.compile(mlp_keys)
+    self.cnn_keys = [
+        k for k, v in shapes.items() if re.match(cnn_keys, k) and len(v) == 3]
+    self.mlp_keys = [
+        k for k, v in shapes.items() if re.match(mlp_keys, k) and len(v) == 1]
+    print('Decoder CNN outputs:', list(self.cnn_keys))
+    print('Decoder MLP outputs:', list(self.mlp_keys))
     self._act = get_act(act)
     self._norm = norm
     self._cnn_depth = cnn_depth
     self._cnn_kernels = cnn_kernels
     self._mlp_layers = mlp_layers
-    self._once = True
 
   def __call__(self, features):
     features = tf.cast(features, prec.global_policy().compute_dtype)
-    dists = {**self._cnn(features), **self._mlp(features)}
-    self._once = False
-    return dists
+    outputs = {}
+    if self.cnn_keys:
+      outputs.update(self._cnn(features))
+    if self.mlp_keys:
+      outputs.update(self._mlp(features))
+    return outputs
 
   def _cnn(self, features):
-    shapes = {
-        key: shape[-1] for key, shape in self._shapes.items()
-        if self._cnn_keys.match(key)}
-    if not shapes:
-      return {}
+    channels = {k: self._shapes[k][-1] for k in self.cnn_keys}
     ConvT = tfkl.Conv2DTranspose
     x = self.get('convin', tfkl.Dense, 32 * self._cnn_depth)(features)
     x = tf.reshape(x, [-1, 1, 1, 32 * self._cnn_depth])
@@ -269,24 +269,19 @@ class Decoder(common.Module):
       depth = 2 ** (len(self._cnn_kernels) - i - 2) * self._cnn_depth
       act, norm = self._act, self._norm
       if i == len(self._cnn_kernels) - 1:
-        depth, act, norm = sum(shapes.values()), tf.identity, 'none'
+        depth, act, norm = sum(channels.values()), tf.identity, 'none'
       x = self.get(f'conv{i}', ConvT, depth, kernel, 2)(x)
       x = self.get(f'convnorm{i}', NormLayer, norm)(x)
       x = act(x)
     x = x.reshape(features.shape[:-1] + x.shape[1:])
-    means = tf.split(x, list(shapes.values()), -1)
+    means = tf.split(x, list(channels.values()), -1)
     dists = {
         key: tfd.Independent(tfd.Normal(mean, 1), 3)
-        for (key, shape), mean in zip(shapes.items(), means)}
-    self._once and print('Decoder CNN outputs:', list(dists.keys()))
+        for (key, shape), mean in zip(channels.items(), means)}
     return dists
 
   def _mlp(self, features):
-    shapes = {
-        key: shape for key, shape in self._shapes.items()
-        if self._mlp_keys.match(key)}
-    if not shapes:
-      return {}
+    shapes = {k: self._shapes[k] for k in self.mlp_keys}
     x = features
     for i, width in enumerate(self._mlp_layers):
       x = self.get(f'dense{i}', tfkl.Dense, width)(x)
@@ -295,7 +290,6 @@ class Decoder(common.Module):
     dists = {}
     for key, shape in shapes.items():
       dists[key] = self.get(f'dense_{key}', DistLayer, shape)(x)
-    self._once and print('Decoder MLP outputs:', list(dists.keys()))
     return dists
 
 
@@ -392,7 +386,7 @@ class DistLayer(common.Module):
       return tfd.Independent(dist, 1)
     if self._dist == 'onehot':
       return common.OneHotDist(out)
-    NotImplementedError(self._dist)
+    raise NotImplementedError(self._dist)
 
 
 class NormLayer(common.Module):

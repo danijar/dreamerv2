@@ -18,6 +18,14 @@ class GymWrapper:
     self._obs_key = obs_key
     self._act_key = act_key
 
+  def __getattr__(self, name):
+    if name.startswith('__'):
+      raise AttributeError(name)
+    try:
+      return getattr(self._env, name)
+    except AttributeError:
+      raise ValueError(name)
+
   @property
   def obs_space(self):
     if self._obs_is_dict:
@@ -45,10 +53,10 @@ class GymWrapper:
     obs, reward, done, info = self._env.step(action)
     if not self._obs_is_dict:
       obs = {self._obs_key: obs}
-    obs['reward'] = reward
-    obs['is_first'] = np.array(False, np.bool)
-    obs['is_last'] = np.array(done, np.bool)
-    obs['is_terminal'] = np.array(info.get('is_terminal', done), np.bool)
+    obs['reward'] = float(reward)
+    obs['is_first'] = False
+    obs['is_last'] = done
+    obs['is_terminal'] = info.get('is_terminal', done)
     return obs
 
   def reset(self):
@@ -56,9 +64,9 @@ class GymWrapper:
     if not self._obs_is_dict:
       obs = {self._obs_key: obs}
     obs['reward'] = 0.0
-    obs['is_first'] = np.array(True, np.bool)
-    obs['is_last'] = np.array(False, np.bool)
-    obs['is_terminal'] = np.array(False, np.bool)
+    obs['is_first'] = True
+    obs['is_last'] = False
+    obs['is_terminal'] = False
     return obs
 
 
@@ -121,10 +129,10 @@ class DMC:
 
   def step(self, action):
     assert np.isfinite(action['action']).all(), action['action']
-    reward = 0
+    reward = 0.0
     for _ in range(self._action_repeat):
       time_step = self._env.step(action['action'])
-      reward += time_step.reward or 0
+      reward += time_step.reward or 0.0
       if time_step.last():
         break
     assert time_step.discount in (0, 1)
@@ -178,12 +186,14 @@ class Atari:
     env.spec = gym.envs.registration.EnvSpec('NoFrameskip-v0')
     self._env = gym.wrappers.AtariPreprocessing(
         env, noops, action_repeat, size[0], life_done, grayscale)
+    self._size = size
     self._grayscale = grayscale
 
   @property
   def obs_space(self):
+    shape = self._size + (1 if self._grayscale else 3,)
     return {
-        'image': self._env.observation_space,
+        'image': gym.spaces.Box(0, 255, shape, np.uint8),
         'ram': gym.spaces.Box(0, 255, (128,), np.uint8),
         'reward': gym.spaces.Box(-np.inf, np.inf, (), dtype=np.float32),
         'is_first': gym.spaces.Box(0, 1, (), dtype=np.bool),
@@ -276,11 +286,11 @@ class Crafter:
   def reset(self):
     obs = {
         'image': self._env.reset(),
-        'reward': 0,
+        'reward': 0.0,
         'is_first': True,
         'is_last': False,
         'is_terminal': False,
-        'log_reward': 0,
+        'log_reward': 0.0,
     }
     obs.update({
         f'log_achievement_{k}': 0
@@ -310,7 +320,7 @@ class Dummy:
   def step(self, action):
     return {
         'image': np.zeros((64, 64, 3)),
-        'reward': 0,
+        'reward': 0.0,
         'is_first': False,
         'is_last': False,
         'is_terminal': False,
@@ -319,7 +329,7 @@ class Dummy:
   def reset(self):
     return {
         'image': np.zeros((64, 64, 3)),
-        'reward': 0,
+        'reward': 0.0,
         'is_first': True,
         'is_last': False,
         'is_terminal': False,
@@ -431,10 +441,16 @@ class OneHotAction:
 
 class ResizeImage:
 
-  def __init__(self, env, size=(64, 64), key='image'):
+  def __init__(self, env, size=(64, 64)):
     self._env = env
-    self._key = key
-    self._shape = size
+    self._size = size
+    self._keys = [
+        k for k, v in env.obs_space.items()
+        if len(v.shape) > 1 and v.shape[:2] != size]
+    print(f'Resizing keys {",".join(self._keys)} to {self._size}.')
+    if self._keys:
+      from PIL import Image
+      self._Image = Image
 
   def __getattr__(self, name):
     if name.startswith('__'):
@@ -447,26 +463,60 @@ class ResizeImage:
   @property
   def obs_space(self):
     spaces = self._env.obs_space
-    shape = self._shape + spaces[self._key].shape[2:]
-    spaces[self._key] = gym.spaces.Box(0, 255, shape, np.uint8)
+    for key in self._keys:
+      shape = self._size + spaces[key].shape[2:]
+      spaces[key] = gym.spaces.Box(0, 255, shape, np.uint8)
     return spaces
 
   def step(self, action):
     obs = self._env.step(action)
-    obs[self._key] = self._resize(obs[self._key])
+    for key in self._keys:
+      obs[key] = self._resize(obs[key])
     return obs
 
   def reset(self):
     obs = self._env.reset()
-    obs[self._key] = self._resize(obs[self._key])
+    for key in self._keys:
+      obs[key] = self._resize(obs[key])
     return obs
 
   def _resize(self, image):
-    from PIL import Image
-    image = Image.fromarray(image)
-    image = image.resize(self._shape, Image.NEAREST)
+    image = self._Image.fromarray(image)
+    image = image.resize(self._size, self._Image.NEAREST)
     image = np.array(image)
     return image
+
+
+class RenderImage:
+
+  def __init__(self, env, key='image'):
+    self._env = env
+    self._key = key
+    self._shape = self._env.render().shape
+
+  def __getattr__(self, name):
+    if name.startswith('__'):
+      raise AttributeError(name)
+    try:
+      return getattr(self._env, name)
+    except AttributeError:
+      raise ValueError(name)
+
+  @property
+  def obs_space(self):
+    spaces = self._env.obs_space
+    spaces[self._key] = gym.spaces.Box(0, 255, self._shape, np.uint8)
+    return spaces
+
+  def step(self, action):
+    obs = self._env.step(action)
+    obs[self._key] = self._env.render('rgb_array')
+    return obs
+
+  def reset(self):
+    obs = self._env.reset()
+    obs[self._key] = self._env.render('rgb_array')
+    return obs
 
 
 class Async:

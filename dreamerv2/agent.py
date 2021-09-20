@@ -1,6 +1,3 @@
-import re
-
-import numpy as np
 import tensorflow as tf
 from tensorflow.keras import mixed_precision as prec
 
@@ -10,29 +7,29 @@ import expl
 
 class Agent(common.Module):
 
-  def __init__(self, config, logger, step, shapes):
+  def __init__(self, config, obs_space, act_space, step):
     self.config = config
-    self._logger = logger
-    self._num_act = shapes['action'][-1]
-    self._counter = step
-    self.step = tf.Variable(int(self._counter), tf.int64)
-    self.wm = WorldModel(self.step, shapes, config)
-    self._task_behavior = ActorCritic(config, self.step, self._num_act)
+    self.obs_space = obs_space
+    self.act_space = act_space['action']
+    self.step = step
+    self.tfstep = tf.Variable(int(self.step), tf.int64)
+    self.wm = WorldModel(config, obs_space, self.tfstep)
+    self._task_behavior = ActorCritic(config, self.act_space, self.tfstep)
     if config.expl_behavior == 'greedy':
       self._expl_behavior = self._task_behavior
     else:
-      reward = lambda seq: self.wm.heads['reward'](seq['feat']).mode()
-      inputs = config, self.wm, self._num_act, self.step, reward
-      self._expl_behavior = getattr(expl, config.expl_behavior)(*inputs)
+      self._expl_behavior = getattr(expl, config.expl_behavior)(
+          self.config, self.act_space, self.wm, self.tfstep,
+          lambda seq: self.wm.heads['reward'](seq['feat']).mode())
 
   @tf.function
   def policy(self, obs, state=None, mode='train'):
     obs = tf.nest.map_structure(tf.tensor, obs)
-    tf.py_function(lambda: self.step.assign(
-        int(self._counter), read_value=False), [], [])
+    tf.py_function(lambda: self.tfstep.assign(
+        int(self.step), read_value=False), [], [])
     if state is None:
       latent = self.wm.rssm.initial(len(obs['reward']))
-      action = tf.zeros((len(obs['reward']), self._num_act))
+      action = tf.zeros((len(obs['reward']),) + self.act_space.shape)
       state = latent, action
     latent, action = state
     embed = self.wm.encoder(self.wm.preprocess(obs))
@@ -52,7 +49,7 @@ class Agent(common.Module):
       actor = self._task_behavior.actor(feat)
       action = actor.sample()
       noise = self.config.expl_noise
-    action = common.action_noise(action, noise, self.config.discrete)
+    action = common.action_noise(action, noise, self.act_space)
     outputs = {'action': action}
     state = (latent, action)
     return outputs, state
@@ -75,20 +72,20 @@ class Agent(common.Module):
   def report(self, data):
     report = {}
     data = self.wm.preprocess(data)
-    for key in data:
-      if re.match(self.config.decoder.cnn_keys, key):
-        name = key.replace('/', '_')
-        report[f'openl_{name}'] = self.wm.video_pred(data, key)
+    for key in self.wm.heads['decoder'].cnn_keys:
+      name = key.replace('/', '_')
+      report[f'openl_{name}'] = self.wm.video_pred(data, key)
     return report
 
 
 class WorldModel(common.Module):
 
-  def __init__(self, step, shapes, config):
-    self.step = step
+  def __init__(self, config, obs_space, tfstep):
+    shapes = {k: tuple(v.shape) for k, v in obs_space.items()}
     self.config = config
+    self.tfstep = tfstep
     self.rssm = common.EnsembleRSSM(**config.rssm)
-    self.encoder = common.Encoder(**config.encoder)
+    self.encoder = common.Encoder(shapes, **config.encoder)
     self.heads = {}
     self.heads['decoder'] = common.Decoder(shapes, **config.decoder)
     self.heads['reward'] = common.MLP([], **config.reward_head)
@@ -207,19 +204,26 @@ class WorldModel(common.Module):
 
 class ActorCritic(common.Module):
 
-  def __init__(self, config, step, num_actions):
+  def __init__(self, config, act_space, tfstep):
     self.config = config
-    self.step = step
-    self.num_actions = num_actions
-    self.actor = common.MLP(num_actions, **config.actor)
-    self.critic = common.MLP([], **config.critic)
-    if config.slow_target:
-      self._target_critic = common.MLP([], **config.critic)
+    self.act_space = act_space
+    self.tfstep = tfstep
+    discrete = hasattr(act_space, 'n')
+    if self.config.actor.dist == 'auto':
+      self.config = self.config.update({
+          'actor.dist': 'onehot' if discrete else 'trunc_normal'})
+    if self.config.actor_grad == 'auto':
+      self.config = self.config.update({
+          'actor_grad': 'reinforce' if discrete else 'dynamics'})
+    self.actor = common.MLP(act_space.shape[0], **self.config.actor)
+    self.critic = common.MLP([], **self.config.critic)
+    if self.config.slow_target:
+      self._target_critic = common.MLP([], **self.config.critic)
       self._updates = tf.Variable(0, tf.int64)
     else:
       self._target_critic = self.critic
-    self.actor_opt = common.Optimizer('actor', **config.actor_opt)
-    self.critic_opt = common.Optimizer('critic', **config.critic_opt)
+    self.actor_opt = common.Optimizer('actor', **self.config.actor_opt)
+    self.critic_opt = common.Optimizer('critic', **self.config.critic_opt)
     self.rewnorm = common.StreamNorm(**self.config.reward_norm)
 
   def train(self, world_model, start, is_terminal, reward_fn):
@@ -271,13 +275,13 @@ class ActorCritic(common.Module):
       baseline = self._target_critic(seq['feat'][:-2]).mode()
       advantage = tf.stop_gradient(target[1:] - baseline)
       objective = policy.log_prob(seq['action'][1:-1]) * advantage
-      mix = common.schedule(self.config.actor_grad_mix, self.step)
+      mix = common.schedule(self.config.actor_grad_mix, self.tfstep)
       objective = mix * target[1:] + (1 - mix) * objective
       metrics['actor_grad_mix'] = mix
     else:
       raise NotImplementedError(self.config.actor_grad)
     ent = policy.entropy()
-    ent_scale = common.schedule(self.config.actor_ent, self.step)
+    ent_scale = common.schedule(self.config.actor_ent, self.tfstep)
     objective += ent_scale * ent
     weight = tf.stop_gradient(seq['weight'])
     actor_loss = -(weight[:-2] * objective).mean()

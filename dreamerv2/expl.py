@@ -7,12 +7,12 @@ import common
 
 class Random(common.Module):
 
-  def __init__(self, config, world_model, num_actions, step, reward):
+  def __init__(self, config, act_space, wm, tfstep, reward):
     self.config = config
-    self.num_actions = num_actions
+    self.act_space = self.act_space
 
   def actor(self, feat):
-    shape = feat.shape[:-1] + [self.num_actions]
+    shape = feat.shape[:-1] + self.act_space.shape
     if self.config.actor.dist == 'onehot':
       return common.OneHotDist(tf.zeros(shape))
     else:
@@ -25,11 +25,11 @@ class Random(common.Module):
 
 class Plan2Explore(common.Module):
 
-  def __init__(self, config, world_model, num_actions, step, reward):
+  def __init__(self, config, act_space, wm, tfstep, reward):
     self.config = config
     self.reward = reward
-    self.wm = world_model
-    self.ac = agent.ActorCritic(config, step, num_actions)
+    self.wm = wm
+    self.ac = agent.ActorCritic(config, act_space, tfstep)
     self.actor = self.ac.actor
     stoch_size = config.rssm.stoch
     if config.rssm.discrete:
@@ -98,11 +98,11 @@ class Plan2Explore(common.Module):
 
 class ModelLoss(common.Module):
 
-  def __init__(self, config, world_model, num_actions, step, reward):
+  def __init__(self, config, act_space, wm, tfstep, reward):
     self.config = config
     self.reward = reward
-    self.wm = world_model
-    self.ac = agent.ActorCritic(config, step, num_actions)
+    self.wm = wm
+    self.ac = agent.ActorCritic(config, act_space, tfstep)
     self.actor = self.ac.actor
     self.head = common.MLP([], **self.config.expl_head)
     self.opt = common.Optimizer('expl', **self.config.expl_opt)
