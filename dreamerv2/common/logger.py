@@ -1,4 +1,5 @@
 import json
+import os
 import pathlib
 import time
 
@@ -97,7 +98,9 @@ class JSONLOutput:
 class TensorBoardOutput:
 
   def __init__(self, logdir, fps=20):
-    self._logdir = pathlib.Path(logdir).expanduser()
+    # The TensorFlow summary writer supports file protocols like gs://. We use
+    # os.path over pathlib here to preserve those prefixes.
+    self._logdir = os.path.expanduser(logdir)
     self._writer = None
     self._fps = fps
 
@@ -120,7 +123,7 @@ class TensorBoardOutput:
     if not self._writer:
       import tensorflow as tf
       self._writer = tf.summary.create_file_writer(
-          str(self._logdir), max_queue=1000)
+          self._logdir, max_queue=1000)
 
   def _video_summary(self, name, video, step):
     import tensorflow as tf
