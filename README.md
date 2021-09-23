@@ -1,3 +1,7 @@
+**Status:** Stable release
+
+[![PyPI](https://img.shields.io/pypi/v/dreamerv2.svg)](https://pypi.python.org/pypi/dreamerv2/#history)
+
 # Mastering Atari with Discrete World Models
 
 Implementation of the [DreamerV2][website] agent in TensorFlow 2. Training
@@ -53,82 +57,12 @@ For more information:
 - [Project website](https://danijar.com/dreamerv2/)
 - [Research paper](https://arxiv.org/pdf/2010.02193.pdf)
 
-## Manual Instructions
+## Using the Package
 
-The instructions are for running the DreamerV2 repository on your local
-computer, which allows you to modify the agent. See the following sections for
-alternative ways to run the agent.
-
-Get dependencies:
-
-```sh
-pip3 install tensorflow==2.4.2 tensorflow_probability==0.12.2 matplotlib ruamel.yaml 'gym[atari]'
-```
-
-Train on Atari:
-
-```sh
-python3 dreamerv2/train.py --logdir ~/logdir/atari_pong/dreamerv2/1 --configs defaults atari --task atari_pong
-```
-
-Train on Control Suite:
-
-```sh
-python3 dreamerv2/train.py --logdir ~/logdir/dmc_walker_walk/dreamerv2/1 --configs defaults dmc --task dmc_walker_walk
-```
-
-Monitor results:
-
-```sh
-tensorboard --logdir ~/logdir
-```
-
-Generate plots:
-
-```sh
-python3 common/plot.py --indir ~/logdir --outdir ~/plots --xaxis step --yaxis eval_return --bins 1e6
-```
-
-## Docker Instructions
-
-The [Dockerfile](https://github.com/danijar/dreamerv2/blob/main/Dockerfile)
-lets you run DreamerV2 without installing its dependencies in your system. This
-requires you to have Docker with GPU access set up.
-
-Check your setup:
-
-```sh
-docker run -it --rm --gpus all tensorflow/tensorflow:2.4.2-gpu nvidia-smi
-```
-
-Train on Atari:
-
-```sh
-docker build -t dreamerv2 .
-docker run -it --rm --gpus all -v ~/logdir:/logdir dreamerv2 \
-  python3 dreamerv2/train.py --logdir /logdir/atari_pong/dreamerv2/1 --configs defaults atari --task atari_pong
-```
-
-Train on Control Suite:
-
-```sh
-docker build -t dreamerv2 . --build-arg MUJOCO_KEY="$(cat ~/.mujoco/mjkey.txt)"
-docker run -it --rm --gpus all -v ~/logdir:/logdir dreamerv2 \
-  python3 dreamerv2/train.py --logdir /logdir/dmc_walker_walk/dreamerv2/1 --configs defaults dmc --task dmc_walker_walk
-```
-
-## External Instructions
-
-You can also use DreamerV2 as a package if you just want to run it on a custom
-env without modifying the agent.
-
-Install package:
-
-```sh
-pip3 install dreamerv2
-```
-
-Example script:
+The easiest way to run DreamerV2 on new environments is to install the package
+via `pip3 install dreamerv2`. The code automatically detects whether the
+environment uses discrete or continuous actions. Here is a usage example that
+trains DreamerV2 on the MiniGrid environment:
 
 ```python
 import gym
@@ -150,10 +84,79 @@ env = gym_minigrid.wrappers.RGBImgPartialObsWrapper(env)
 dv2.train(env, config)
 ```
 
+## Manual Instructions
+
+To modify the DreamerV2 agent, clone the repository and follow the instructions
+below. There is also a Dockerfile available, in case you do not want to install
+the dependencies on your system.
+
+Get dependencies:
+
+```sh
+pip3 install tensorflow==2.6.0 tensorflow_probability ruamel.yaml 'gym[atari]' dm_control
+```
+
+Train on Atari:
+
+```sh
+python3 dreamerv2/train.py --logdir ~/logdir/atari_pong/dreamerv2/1 \
+  --configs atari --task atari_pong
+```
+
+Train on DM Control:
+
+```sh
+python3 dreamerv2/train.py --logdir ~/logdir/dmc_walker_walk/dreamerv2/1 \
+  --configs dmc --task dmc_walker_walk
+```
+
+Monitor results:
+
+```sh
+tensorboard --logdir ~/logdir
+```
+
+Generate plots:
+
+```sh
+python3 common/plot.py --indir ~/logdir --outdir ~/plots \
+  --xaxis step --yaxis eval_return --bins 1e6
+```
+
+## Docker Instructions
+
+The [Dockerfile](https://github.com/danijar/dreamerv2/blob/main/Dockerfile)
+lets you run DreamerV2 without installing its dependencies in your system. This
+requires you to have Docker with GPU access set up.
+
+Check your setup:
+
+```sh
+docker run -it --rm --gpus all tensorflow/tensorflow:2.4.2-gpu nvidia-smi
+```
+
+Train on Atari:
+
+```sh
+docker build -t dreamerv2 .
+docker run -it --rm --gpus all -v ~/logdir:/logdir dreamerv2 \
+  python3 dreamerv2/train.py --logdir /logdir/atari_pong/dreamerv2/1 \
+    --configs atari --task atari_pong
+```
+
+Train on DM Control:
+
+```sh
+docker build -t dreamerv2 . --build-arg MUJOCO_KEY="$(cat ~/.mujoco/mjkey.txt)"
+docker run -it --rm --gpus all -v ~/logdir:/logdir dreamerv2 \
+  python3 dreamerv2/train.py --logdir /logdir/dmc_walker_walk/dreamerv2/1 \
+    --configs dmc --task dmc_walker_walk
+```
+
 ## Tips
 
 - **Efficient debugging.** You can use the `debug` config as in `--configs
-defaults atari debug`. This reduces the batch size, increases the evaluation
+atari debug`. This reduces the batch size, increases the evaluation
 frequency, and disables `tf.function` graph compilation for easy line-by-line
 debugging.
 
