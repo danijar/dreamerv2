@@ -72,7 +72,7 @@ def main():
   should_log = common.Every(config.log_every)
   should_video_train = common.Every(config.eval_every)
   should_video_eval = common.Every(config.eval_every)
-  should_expl = common.Until(config.expl_until)
+  should_expl = common.Until(config.expl_until // config.action_repeat)
 
   def make_env(mode):
     suite, task = config.task.split('_', 1)
