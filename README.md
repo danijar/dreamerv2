@@ -107,7 +107,7 @@ Train on DM Control:
 
 ```sh
 python3 dreamerv2/train.py --logdir ~/logdir/dmc_walker_walk/dreamerv2/1 \
-  --configs dmc --task dmc_walker_walk
+  --configs dmc_vision --task dmc_walker_walk
 ```
 
 Monitor results:
@@ -150,7 +150,7 @@ Train on DM Control:
 docker build -t dreamerv2 . --build-arg MUJOCO_KEY="$(cat ~/.mujoco/mjkey.txt)"
 docker run -it --rm --gpus all -v ~/logdir:/logdir dreamerv2 \
   python3 dreamerv2/train.py --logdir /logdir/dmc_walker_walk/dreamerv2/1 \
-    --configs dmc --task dmc_walker_walk
+    --configs dmc_vision --task dmc_walker_walk
 ```
 
 ## Tips
