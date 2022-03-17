@@ -270,7 +270,8 @@ class ActorCritic(common.Module):
     elif self.config.actor_grad == 'reinforce':
       baseline = self._target_critic(seq['feat'][:-2]).mode()
       advantage = tf.stop_gradient(target[1:] - baseline)
-      objective = policy.log_prob(seq['action'][1:-1]) * advantage
+      action = tf.stop_gradient(seq['action'][1:-1])
+      objective = policy.log_prob(action) * advantage
     elif self.config.actor_grad == 'both':
       baseline = self._target_critic(seq['feat'][:-2]).mode()
       advantage = tf.stop_gradient(target[1:] - baseline)
