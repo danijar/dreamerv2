@@ -78,7 +78,7 @@ class EnsembleRSSM(common.Module):
     if self._discrete:
       logit = state['logit']
       logit = tf.cast(logit, tf.float32)
-      dist = tfd.Independent(common.OneHotDist(logit), 1)
+      dist = tfd.Independent(common.OneHotDist(logit), 2)
     else:
       mean, std = state['mean'], state['std']
       mean = tf.cast(mean, tf.float32)
