@@ -1,4 +1,4 @@
-FROM tensorflow/tensorflow:2.4.2-gpu
+FROM tensorflow/tensorflow:2.10.0-gpu
 
 # System packages.
 RUN apt-get update && apt-get install -y \
@@ -28,7 +28,6 @@ RUN pip3 install --no-cache-dir \
 # Atari ROMS.
 RUN wget -L -nv http://www.atarimania.com/roms/Roms.rar && \
   unrar x Roms.rar && \
-  unzip ROMS.zip && \
   python3 -m atari_py.import_roms ROMS && \
   rm -rf Roms.rar ROMS.zip ROMS
 
