@@ -1,4 +1,12 @@
-FROM tensorflow/tensorflow:2.4.2-gpu
+FROM tensorflow/tensorflow:2.6.0-gpu
+
+# Update the CUDA Linux GPG Repository Key
+RUN apt-key del 7fa2af80
+RUN apt-get install -y wget && \
+  wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/cuda-keyring_1.0-1_all.deb && \
+  dpkg -i cuda-keyring_1.0-1_all.deb && \
+  rm /etc/apt/sources.list.d/cuda.list && \
+  apt-get update
 
 # System packages.
 RUN apt-get update && apt-get install -y \
@@ -17,25 +25,19 @@ RUN mkdir -p /root/.mujoco && \
   rm mujoco.zip
 
 # Python packages.
-RUN pip3 install --no-cache-dir \
-  'gym[atari]' \
-  atari_py \
-  crafter \
-  dm_control \
-  ruamel.yaml \
-  tensorflow_probability==0.12.2
+COPY requirements.txt ./
+RUN pip3 install --upgrade pip && \
+  pip3 install -r requirements.txt --no-cache-dir && \
+  rm requirements.txt
 
 # Atari ROMS.
 RUN wget -L -nv http://www.atarimania.com/roms/Roms.rar && \
   unrar x Roms.rar && \
-  unzip ROMS.zip && \
   python3 -m atari_py.import_roms ROMS && \
-  rm -rf Roms.rar ROMS.zip ROMS
+  rm -rf "Roms.rar" "ROMS" "HC ROMS"
 
 # MuJoCo key.
-ARG MUJOCO_KEY=""
-RUN echo "$MUJOCO_KEY" > /root/.mujoco/mjkey.txt
-RUN cat /root/.mujoco/mjkey.txt
+RUN wget -P /root/.mujoco https://www.roboti.us/file/mjkey.txt
 
 # DreamerV2.
 ENV TF_XLA_FLAGS --tf_xla_auto_jit=2
