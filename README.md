@@ -132,7 +132,7 @@ requires you to have Docker with GPU access set up.
 Check your setup:
 
 ```sh
-docker run -it --rm --gpus all tensorflow/tensorflow:2.4.2-gpu nvidia-smi
+docker run -it --rm --gpus all tensorflow/tensorflow:2.6.0-gpu nvidia-smi
 ```
 
 Train on Atari:
@@ -147,7 +147,7 @@ docker run -it --rm --gpus all -v ~/logdir:/logdir dreamerv2 \
 Train on DM Control:
 
 ```sh
-docker build -t dreamerv2 . --build-arg MUJOCO_KEY="$(cat ~/.mujoco/mjkey.txt)"
+docker build -t dreamerv2 .
 docker run -it --rm --gpus all -v ~/logdir:/logdir dreamerv2 \
   python3 dreamerv2/train.py --logdir /logdir/dmc_walker_walk/dreamerv2/1 \
     --configs dmc_vision --task dmc_walker_walk
